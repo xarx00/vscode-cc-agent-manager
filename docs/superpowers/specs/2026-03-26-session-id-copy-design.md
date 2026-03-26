@@ -5,7 +5,7 @@
 
 ## Overview
 
-Add a clickable hash button to the conversation header breadcrumb so users can copy session IDs (and agent IDs) to the clipboard — either as a raw ID or as a ready-to-run `claude -c <id>` command.
+Add a clickable hash button to the conversation header breadcrumb so users can copy session IDs (and agent IDs) to the clipboard — either as a raw ID, a ready-to-run `claude -c <id>` resume command, or a `claude -r <id> --fork-session` fork command.
 
 ## Breadcrumb Structure
 
@@ -35,10 +35,11 @@ A single shared `<div id="hash-dropdown">` lives in the document (created once, 
 
 **Contents:**
 ```
-┌─────────────────────────┐
-│ Copy ID                 │
-│ Copy claude -c <hash>   │
-└─────────────────────────┘
+┌──────────────────────────────────────────┐
+│ Copy ID                                  │
+│ Copy claude -c <hash>                    │
+│ Copy claude -r <hash> --fork-session     │
+└──────────────────────────────────────────┘
 ```
 
 **Behavior:**
@@ -79,7 +80,7 @@ No changes to `agentManagerPanel.ts`, `claudeReader.ts`, or `types.ts`. No new e
 
 ## Acceptance Criteria
 
-- [ ] Clicking the session hash in the breadcrumb opens a dropdown with "Copy ID" and "Copy `claude -c <id>`"
+- [ ] Clicking the session hash in the breadcrumb opens a dropdown with "Copy ID", "Copy `claude -c <id>`", and "Copy `claude -r <id> --fork-session`"
 - [ ] Clicking the agent hash in an agent-view breadcrumb opens the same dropdown for the agent ID
 - [ ] Selecting an option copies the correct string to the clipboard
 - [ ] The button shows "Copied!" for ~1.5s after a successful copy

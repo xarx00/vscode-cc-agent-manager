@@ -25,6 +25,8 @@
   /** @type {string | null} */
   let currentSessionCwd = null;
   let hasLiveTerminal = false;
+  /** @type {HTMLElement | null} */
+  let _dropdownActiveBtn = null;
 
   // Forward declarations for later tasks (Task 3 will declare properly)
   let focusedIndex = -1;
@@ -228,6 +230,22 @@
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.settings-wrap')) {
       settingsPanel.classList.remove('open');
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    const btn = /** @type {HTMLElement} */ (e.target).closest('.hash-btn');
+    if (btn) {
+      const dropdown = document.getElementById('hash-dropdown');
+      if (dropdown && dropdown.style.display !== 'none' && _dropdownActiveBtn === btn) {
+        closeHashDropdown();
+      } else {
+        openHashDropdown(/** @type {HTMLElement} */ (btn));
+      }
+      return;
+    }
+    if (!/** @type {HTMLElement} */ (e.target).closest('#hash-dropdown')) {
+      closeHashDropdown();
     }
   });
 
@@ -619,6 +637,57 @@
     if (layoutMode === 'narrow' && typeof renderIconRail === 'function') renderIconRail();
   }
 
+  function ensureHashDropdown() {
+    let el = document.getElementById('hash-dropdown');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'hash-dropdown';
+    el.style.display = 'none';
+    el.innerHTML =
+      '<div class="hash-dropdown-item" data-action="id">Copy ID</div>' +
+      '<div class="hash-dropdown-item" data-action="cmd">Copy claude -c \u2026</div>' +
+      '<div class="hash-dropdown-item" data-action="fork">Copy claude -r \u2026 --fork-session</div>';
+    document.body.appendChild(el);
+    el.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      const item = /** @type {HTMLElement} */ (ev.target).closest('.hash-dropdown-item');
+      if (!item) return;
+      const id = el.dataset.currentId || '';
+      const action = item.dataset.action;
+      const text = action === 'cmd' ? `claude -c ${id}` : action === 'fork' ? `claude -r ${id} --fork-session` : id;
+      const activeBtn = _dropdownActiveBtn;
+      closeHashDropdown();
+      navigator.clipboard.writeText(text).then(() => {
+        if (!activeBtn) return;
+        const orig = activeBtn.textContent;
+        activeBtn.textContent = 'Copied!';
+        setTimeout(() => { activeBtn.textContent = orig; }, 1500);
+      });
+    });
+    return el;
+  }
+
+  function openHashDropdown(btn) {
+    const dropdown = ensureHashDropdown();
+    _dropdownActiveBtn = btn;
+    dropdown.dataset.currentId = btn.dataset.id || '';
+    const short = (btn.dataset.id || '').slice(0, 8);
+    const cmdItem = dropdown.querySelector('[data-action="cmd"]');
+    if (cmdItem) cmdItem.textContent = `Copy claude -c ${short}\u2026`;
+    const forkItem = dropdown.querySelector('[data-action="fork"]');
+    if (forkItem) forkItem.textContent = `Copy claude -r ${short}\u2026 --fork-session`;
+    const rect = btn.getBoundingClientRect();
+    dropdown.style.top = `${rect.bottom + 4}px`;
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.display = 'block';
+  }
+
+  function closeHashDropdown() {
+    const el = document.getElementById('hash-dropdown');
+    if (el) el.style.display = 'none';
+    _dropdownActiveBtn = null;
+  }
+
   function selectConversation(projectKey, sessionId, agentId, rowEl) {
     selectedSessionId = sessionId;
     selectedAgentId = agentId;
@@ -658,10 +727,13 @@
     const breadcrumb = document.getElementById('conv-breadcrumb');
     const project = allProjects.find((p) => p.key === projectKey);
     const projectName = project ? project.displayName : projectKey;
+    function hashBtn(id) {
+      return `<button class="hash-btn" data-id="${id}">${id.slice(0, 8)}\u2026</button>`;
+    }
     if (agentId) {
-      breadcrumb.textContent = `${projectName} / ${sessionId.slice(0, 8)}… / agent`;
+      breadcrumb.innerHTML = `<span>${projectName}</span><span> / </span>${hashBtn(sessionId)}<span> / </span>${hashBtn(agentId)}`;
     } else {
-      breadcrumb.textContent = `${projectName} / ${sessionId.slice(0, 8)}…`;
+      breadcrumb.innerHTML = `<span>${projectName}</span><span> / </span>${hashBtn(sessionId)}`;
     }
 
     vscode.postMessage({ command: 'loadConversation', projectKey, sessionId, agentId });
@@ -1139,6 +1211,7 @@
         break;
       }
       case 'Escape': {
+        closeHashDropdown();
         e.preventDefault();
         selectedSessionId = null; selectedAgentId = null; selectedProjectKey = null;
         exportBtn.style.display = 'none';
