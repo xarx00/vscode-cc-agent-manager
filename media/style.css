@@ -639,8 +639,45 @@ button {
   font-family: var(--vscode-editor-font-family, monospace);
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hash-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+.hash-btn:hover {
+  text-decoration: underline;
+  color: var(--vscode-foreground);
+}
+
+#hash-dropdown {
+  position: fixed;
+  z-index: 1000;
+  background: var(--vscode-menu-background);
+  color: var(--vscode-menu-foreground);
+  border: 1px solid var(--vscode-menu-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 180px;
+}
+
+.hash-dropdown-item {
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.hash-dropdown-item:hover {
+  background: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
 }
 
 /* ── LIVE Indicator ──────────────────────────────────────────────────────── */
