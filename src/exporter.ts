@@ -91,6 +91,27 @@ export function expandTemplate(template: string, session: ClaudeSession, project
   return result;
 }
 
+/**
+ * Find the path to write the root export file.
+ * If `basePath` already exists with identical content, reuse it (no duplicate).
+ * If it exists with different content, try -2 through -99 with the same check.
+ * Falls back to overwriting `basePath` in the extreme case all slots are taken.
+ */
+function resolveRootPath(basePath: string, content: string): string {
+  if (!fs.existsSync(basePath)) return basePath;
+  if (fs.readFileSync(basePath, 'utf-8') === content) return basePath;
+
+  const dir = path.dirname(basePath);
+  const base = path.basename(basePath, '.md');
+  for (let i = 2; i <= 99; i++) {
+    const candidate = path.join(dir, `${base}-${i}.md`);
+    if (!fs.existsSync(candidate)) return candidate;
+    if (fs.readFileSync(candidate, 'utf-8') === content) return candidate;
+  }
+
+  return basePath; // all 99 slots taken with different content — overwrite base
+}
+
 function agentLabel(agent: SubAgent): string {
   return agent.slug ? slugify(agent.slug) : agent.agentId.slice(0, 8);
 }
@@ -291,9 +312,10 @@ export function exportConversation(
     agentPaths.push(agentPath);
   }
 
-  // Write root file
+  // Write root file — content-aware path selection avoids duplicates
   const rootContent = buildRootMarkdown(session, displayName, rootMessages, agentLinks, format, linkStyle);
-  fs.writeFileSync(rootPath, rootContent, 'utf-8');
+  const actualRootPath = resolveRootPath(rootPath, rootContent);
+  fs.writeFileSync(actualRootPath, rootContent, 'utf-8');
 
-  return { rootPath, agentPaths, skippedAgents };
+  return { rootPath: actualRootPath, agentPaths, skippedAgents };
 }

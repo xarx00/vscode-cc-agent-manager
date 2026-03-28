@@ -411,21 +411,8 @@ export class AgentManagerPanel {
       return undefined;
     }
 
-    // Collision handling: try -2 through -99 before falling back to dialog
-    if (!fs.existsSync(resolved)) {
-      return resolved;
-    }
-    const base = path.basename(resolved, '.md');
-    const resolvedDir = path.dirname(resolved);
-    for (let i = 2; i <= 99; i++) {
-      const candidate = path.join(resolvedDir, `${base}-${i}.md`);
-      if (!fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-
-    // All suffixes taken — fall back to dialog pre-filled with the resolved path
-    return this._showSaveDialog(path.basename(resolved), resolved);
+    // Collision handling and content dedup are done inside exportConversation
+    return resolved;
   }
 
   private async _showSaveDialog(filename: string, fullPath?: string): Promise<string | undefined> {
