@@ -78,7 +78,7 @@ All date tokens are sourced from `session.lastTimestamp`. If `lastTimestamp` is 
 | `{project}` | Project display name, slugified | `my-api-service` |
 | `{branch}` | Git branch, slugified; empty string if none | `feature-auth` |
 | `{session-id}` | First 8 chars of session ID | `a1b2c3d4` |
-| `{cwd}` | Session working directory (`session.cwd`); empty string if absent | `/Users/kyle/work/api` |
+| `{cwd}` | Session working directory (`session.cwd`); empty string if absent | `/Users/bean/work/api` |
 
 **Slugification** for `{project}` and `{branch}`: lowercase, replace non-alphanumeric runs with `-`, strip leading/trailing `-`.
 
