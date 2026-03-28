@@ -1188,8 +1188,11 @@
   }
 
   document.addEventListener('keydown', (e) => {
-    if (document.activeElement === searchInput) {
-      if (e.key === 'Escape' || e.key === 'Enter') { searchInput.blur(); sidebarHasFocus = true; e.preventDefault(); }
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+      if (activeEl === searchInput) {
+        if (e.key === 'Escape' || e.key === 'Enter') { searchInput.blur(); sidebarHasFocus = true; e.preventDefault(); }
+      }
       return;
     }
     if (helpOverlayVisible) {
