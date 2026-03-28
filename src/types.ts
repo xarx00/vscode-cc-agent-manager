@@ -54,6 +54,7 @@ export interface ConversationMessage {
 export interface ManagerSettings {
   soundEnabled: boolean;
   soundRepeatSec: number;
-  exportDestination: 'dialog' | 'default' | 'cwd';
+  exportTemplate: string;
+  exportLinkStyle: 'markdown' | 'wiki';
   exportToolFormat: 'compact' | 'expanded' | 'omit';
 }

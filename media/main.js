@@ -7,7 +7,7 @@
   let filterText = '';
   let activeFilter = 'all';
   let pinnedKeys = new Set();
-  let settings = { soundEnabled: false, soundRepeatSec: 0, exportDestination: 'dialog', exportToolFormat: 'compact' };
+  let settings = { soundEnabled: false, soundRepeatSec: 0, exportTemplate: '~/Documents/claude-exports/{slug}.md', exportLinkStyle: 'markdown', exportToolFormat: 'compact' };
   let previousWaitingIds = new Set();
   let soundRepeatTimer = null;
   let audioCtx = null;
@@ -264,12 +264,50 @@
     playNotificationSound();
   });
 
-  document.querySelectorAll('input[name="export-dest"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-      settings.exportDestination = radio.value;
+  const exportTemplateInput = document.getElementById('export-template');
+  const exportWikiLinksCb = document.getElementById('export-wiki-links');
+
+  if (exportTemplateInput) {
+    exportTemplateInput.addEventListener('change', () => {
+      settings.exportTemplate = exportTemplateInput.value;
       pushSettings();
     });
-  });
+  }
+
+  const presetDialog = document.getElementById('preset-dialog');
+  const presetDefault = document.getElementById('preset-default');
+  const presetCwd = document.getElementById('preset-cwd');
+
+  if (presetDialog) {
+    presetDialog.addEventListener('click', () => {
+      exportTemplateInput.value = 'dialog';
+      settings.exportTemplate = 'dialog';
+      pushSettings();
+    });
+  }
+
+  if (presetDefault) {
+    presetDefault.addEventListener('click', () => {
+      exportTemplateInput.value = '~/Documents/claude-exports/{slug}.md';
+      settings.exportTemplate = '~/Documents/claude-exports/{slug}.md';
+      pushSettings();
+    });
+  }
+
+  if (presetCwd) {
+    presetCwd.addEventListener('click', () => {
+      exportTemplateInput.value = '{cwd}/{slug}.md';
+      settings.exportTemplate = '{cwd}/{slug}.md';
+      pushSettings();
+    });
+  }
+
+  if (exportWikiLinksCb) {
+    exportWikiLinksCb.addEventListener('change', () => {
+      settings.exportLinkStyle = exportWikiLinksCb.checked ? 'wiki' : 'markdown';
+      pushSettings();
+    });
+  }
 
   document.querySelectorAll('input[name="export-tool"]').forEach((radio) => {
     radio.addEventListener('change', () => {
@@ -281,8 +319,12 @@
   function syncSettingsUI() {
     soundEnabledCb.checked = settings.soundEnabled;
     soundRepeatSel.value = String(settings.soundRepeatSec);
-    const destRadio = document.querySelector(`input[name="export-dest"][value="${settings.exportDestination || 'dialog'}"]`);
-    if (destRadio) destRadio.checked = true;
+    if (exportTemplateInput) {
+      exportTemplateInput.value = settings.exportTemplate || '~/Documents/claude-exports/{slug}.md';
+    }
+    if (exportWikiLinksCb) {
+      exportWikiLinksCb.checked = settings.exportLinkStyle === 'wiki';
+    }
     const toolRadio = document.querySelector(`input[name="export-tool"][value="${settings.exportToolFormat || 'compact'}"]`);
     if (toolRadio) toolRadio.checked = true;
   }

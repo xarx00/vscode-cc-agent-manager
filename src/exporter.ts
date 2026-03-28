@@ -1,6 +1,7 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
-import { ClaudeSession, SubAgent, ConversationMessage, ManagerSettings } from './types';
+import { ClaudeSession, ClaudeProject, SubAgent, ConversationMessage, ManagerSettings } from './types';
 
 export interface ExportParams {
   projectKey: string;
@@ -18,6 +19,76 @@ export interface ExportResult {
 
 function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+/**
+ * Expand a path template with session/project tokens.
+ * Returns the resolved absolute path, or undefined if the result is invalid.
+ * Callers must check for the "dialog" sentinel before calling this function.
+ */
+export function expandTemplate(template: string, session: ClaudeSession, project: ClaudeProject): string | undefined {
+  // Tilde expansion
+  let result = template.startsWith('~')
+    ? os.homedir() + template.slice(1)
+    : template;
+
+  // Date tokens — prefer lastTimestamp, fall back to firstTimestamp, then 'unknown'
+  const tsStr = session.lastTimestamp ?? session.firstTimestamp;
+  let date: Date | undefined;
+  if (tsStr) {
+    try { date = new Date(tsStr); } catch { /* ignore */ }
+  }
+  const dateStr = date ? date.toISOString().slice(0, 10) : 'unknown';
+  const yyyy = date ? String(date.getFullYear()) : 'unknown';
+  const yy = date ? String(date.getFullYear()).slice(2) : 'unknown';
+  const mm = date ? String(date.getMonth() + 1).padStart(2, '0') : 'unknown';
+  const dd = date ? String(date.getDate()).padStart(2, '0') : 'unknown';
+
+  // Slug tokens (same logic as the former _exportFilename)
+  const rawPrompt = session.firstPrompt ?? session.sessionId.slice(0, 8);
+  const slugFull = rawPrompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+  const slugShort = rawPrompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20).replace(/-+$/, '');
+
+  // Project token — slugified display name
+  const projectSlug = project.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  // Branch token — slugified, empty string if absent
+  const branch = session.gitBranch
+    ? session.gitBranch.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    : '';
+
+  // Other tokens
+  const sessionId8 = session.sessionId.slice(0, 8);
+  const cwd = session.cwd ?? '';
+
+  result = result
+    .replace(/\{date\}/g, dateStr)
+    .replace(/\{yyyy\}/g, yyyy)
+    .replace(/\{yy\}/g, yy)
+    .replace(/\{mm\}/g, mm)
+    .replace(/\{dd\}/g, dd)
+    .replace(/\{slug\}/g, slugFull)
+    .replace(/\{short-slug\}/g, slugShort)
+    .replace(/\{project\}/g, projectSlug)
+    .replace(/\{branch\}/g, branch)
+    .replace(/\{session-id\}/g, sessionId8)
+    .replace(/\{cwd\}/g, cwd);
+
+  // Normalize: handle forward slashes on all platforms, collapse repeated separators
+  result = result.split('/').join(path.sep);
+  result = path.normalize(result);
+
+  // Must be an absolute path
+  if (!path.isAbsolute(result)) {
+    return undefined;
+  }
+
+  // Must have a real parent directory (not just the filesystem root)
+  if (path.dirname(result) === path.parse(result).root) {
+    return undefined;
+  }
+
+  return result;
 }
 
 function agentLabel(agent: SubAgent): string {
@@ -120,6 +191,7 @@ function buildRootMarkdown(
   messages: ConversationMessage[],
   agentLinks: Array<{ label: string; filename: string }>,
   format: ManagerSettings['exportToolFormat'],
+  linkStyle: ManagerSettings['exportLinkStyle'],
 ): string {
   const titlePrompt = session.firstPrompt
     ? truncate(session.firstPrompt, 80)
@@ -137,7 +209,11 @@ function buildRootMarkdown(
   if (agentLinks.length > 0) {
     lines.push('## Agents\n');
     for (const { label, filename } of agentLinks) {
-      lines.push(`- [${label}](./${filename})`);
+      const filenameNoExt = filename.replace(/\.md$/, '');
+      const link = linkStyle === 'wiki'
+        ? `- [[${filenameNoExt}|${label}]]`
+        : `- [${label}](./${filename})`;
+      lines.push(link);
     }
     lines.push('');
     lines.push('---\n');
@@ -155,11 +231,16 @@ function buildAgentMarkdown(
   rootFilename: string,
   messages: ConversationMessage[],
   format: ManagerSettings['exportToolFormat'],
+  linkStyle: ManagerSettings['exportLinkStyle'],
 ): string {
   const title = agent.slug ?? agent.agentId.slice(0, 8);
+  const rootFilenameNoExt = rootFilename.replace(/\.md$/, '');
+  const backLink = linkStyle === 'wiki'
+    ? `← [[${rootFilenameNoExt}|Back to session]]`
+    : `← [Back to session](./${rootFilename})`;
 
   const lines: string[] = [];
-  lines.push(`← [Back to session](./${rootFilename})\n`);
+  lines.push(`${backLink}\n`);
   lines.push(`# Agent: ${title}\n`);
   lines.push('## Conversation\n');
   lines.push(renderMessages(messages, format));
@@ -174,6 +255,7 @@ export function exportConversation(
 ): ExportResult {
   const { projectKey, sessionId, displayName, session, readConversation } = params;
   const format = settings.exportToolFormat;
+  const linkStyle = settings.exportLinkStyle ?? 'markdown';
 
   const rootDir = path.dirname(rootPath);
   const rootBasename = path.basename(rootPath, '.md');
@@ -203,14 +285,14 @@ export function exportConversation(
     const agentFilename = `${rootBasename}-agent-${label}.md`;
     agentLinks.push({ label, filename: agentFilename });
 
-    const agentContent = buildAgentMarkdown(agent, label, path.basename(rootPath), agentMessages, format);
+    const agentContent = buildAgentMarkdown(agent, label, path.basename(rootPath), agentMessages, format, linkStyle);
     const agentPath = path.join(rootDir, agentFilename);
     fs.writeFileSync(agentPath, agentContent, 'utf-8');
     agentPaths.push(agentPath);
   }
 
   // Write root file
-  const rootContent = buildRootMarkdown(session, displayName, rootMessages, agentLinks, format);
+  const rootContent = buildRootMarkdown(session, displayName, rootMessages, agentLinks, format, linkStyle);
   fs.writeFileSync(rootPath, rootContent, 'utf-8');
 
   return { rootPath, agentPaths, skippedAgents };
