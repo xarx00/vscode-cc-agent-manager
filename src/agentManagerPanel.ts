@@ -483,7 +483,7 @@ export class AgentManagerPanel {
               <div class="settings-divider"></div>
               <div class="settings-title">Export Settings</div>
               <div class="settings-group-label">Export path</div>
-              <input type="text" id="export-template" class="settings-template-input" placeholder="~/Documents/claude-exports/{slug}.md" />
+              <textarea id="export-template" class="settings-template-input" placeholder="~/Documents/claude-exports/{slug}.md" rows="1" spellcheck="false"></textarea>
               <div class="export-preset-row">
                 <button class="export-preset-btn" id="preset-dialog">Ask each time</button>
                 <button class="export-preset-btn" id="preset-default">Default path</button>

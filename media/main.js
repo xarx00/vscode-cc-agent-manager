@@ -227,6 +227,10 @@
   settingsBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     settingsPanel.classList.toggle('open');
+    // Recalculate textarea height now that the panel is visible (scrollHeight is 0 when hidden).
+    if (settingsPanel.classList.contains('open')) {
+      resizeTemplateInput();
+    }
   });
 
   document.addEventListener('click', (e) => {
@@ -268,13 +272,72 @@
 
   const exportTemplateInput = document.getElementById('export-template');
   const exportWikiLinksCb = document.getElementById('export-wiki-links');
+  /** Last known cursor position in the template input; null = never interacted. */
+  let exportTemplateCursorPos = null;
+
+  function resizeTemplateInput() {
+    if (!exportTemplateInput) return;
+    exportTemplateInput.style.height = 'auto';
+    exportTemplateInput.style.height = exportTemplateInput.scrollHeight + 'px';
+  }
 
   if (exportTemplateInput) {
-    exportTemplateInput.addEventListener('change', () => {
+    // Capture cursor position on blur so token clicks can insert at the right spot.
+    // blur fires before click, so the stored value is always from the last edit position.
+    exportTemplateInput.addEventListener('blur', () => {
+      exportTemplateCursorPos = exportTemplateInput.selectionStart;
+    });
+    // Prevent Enter from inserting newlines into a path string.
+    exportTemplateInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); }
+    });
+    exportTemplateInput.addEventListener('input', () => {
+      resizeTemplateInput();
       settings.exportTemplate = exportTemplateInput.value;
       pushSettings();
     });
   }
+
+  function insertTokenAtCursor(tokenText) {
+    if (!exportTemplateInput) return;
+    const val = exportTemplateInput.value;
+    let insertPos;
+
+    if (exportTemplateCursorPos === null) {
+      // Input never interacted with — insert before .md extension at end
+      const mdIdx = val.lastIndexOf('.md');
+      insertPos = mdIdx >= 0 ? mdIdx : val.length;
+    } else {
+      // If the cursor was inside a {token}, jump past its closing }
+      const before = val.slice(0, exportTemplateCursorPos);
+      const lastOpen = before.lastIndexOf('{');
+      if (lastOpen !== -1 && !before.slice(lastOpen).includes('}')) {
+        const closingBrace = val.indexOf('}', exportTemplateCursorPos);
+        insertPos = closingBrace >= 0 ? closingBrace + 1 : exportTemplateCursorPos;
+      } else {
+        insertPos = exportTemplateCursorPos;
+      }
+    }
+
+    exportTemplateInput.value = val.slice(0, insertPos) + tokenText + val.slice(insertPos);
+    const newPos = insertPos + tokenText.length;
+    exportTemplateCursorPos = newPos;
+    settings.exportTemplate = exportTemplateInput.value;
+    pushSettings();
+    resizeTemplateInput();
+    exportTemplateInput.focus();
+    // Defer selection to the next frame so the browser settles focus first,
+    // which ensures the input scrolls to show the cursor rather than the end.
+    requestAnimationFrame(() => {
+      exportTemplateInput.setSelectionRange(newPos, newPos);
+    });
+  }
+
+  document.querySelectorAll('.export-token-list .token').forEach((tokenEl) => {
+    tokenEl.addEventListener('click', () => {
+      insertTokenAtCursor(tokenEl.textContent.trim());
+    });
+  });
 
   const presetDialog = document.getElementById('preset-dialog');
   const presetDefault = document.getElementById('preset-default');
@@ -285,6 +348,7 @@
       exportTemplateInput.value = 'dialog';
       settings.exportTemplate = 'dialog';
       pushSettings();
+      resizeTemplateInput();
     });
   }
 
@@ -293,6 +357,7 @@
       exportTemplateInput.value = '~/Documents/claude-exports/{slug}.md';
       settings.exportTemplate = '~/Documents/claude-exports/{slug}.md';
       pushSettings();
+      resizeTemplateInput();
     });
   }
 
@@ -301,6 +366,7 @@
       exportTemplateInput.value = '{cwd}/{slug}.md';
       settings.exportTemplate = '{cwd}/{slug}.md';
       pushSettings();
+      resizeTemplateInput();
     });
   }
 
@@ -323,6 +389,7 @@
     soundRepeatSel.value = String(settings.soundRepeatSec);
     if (exportTemplateInput) {
       exportTemplateInput.value = settings.exportTemplate || '~/Documents/claude-exports/{slug}.md';
+      resizeTemplateInput();
     }
     if (exportWikiLinksCb) {
       exportWikiLinksCb.checked = settings.exportLinkStyle === 'wiki';

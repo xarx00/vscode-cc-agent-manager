@@ -195,6 +195,11 @@ button {
   font-size: 11px;
   font-family: var(--vscode-editor-font-family, monospace);
   margin-bottom: 5px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
+  word-break: break-all;
+  min-height: calc(1.4em + 6px);
 }
 
 .settings-template-input:focus {
@@ -251,6 +256,13 @@ button {
   padding: 1px 4px;
   border-radius: 3px;
   color: var(--vscode-textPreformat-foreground, var(--vscode-foreground));
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.token:hover {
+  background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.35));
 }
 
 /* ── Search ───────────────────────────────────────────────────────────────── */
