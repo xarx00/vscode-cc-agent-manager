@@ -2,6 +2,8 @@
 
 ## Overview
 
+The extension uses **test-driven development**: write a failing test first, watch it fail, then write the minimal code to make it pass. Never write production code without a failing test — this applies to new features, bug fixes, and behaviour changes alike.
+
 The extension has two test layers: **Jest** for unit tests (no VS Code required) and **Mocha + @vscode/test-electron** for integration tests (runs in the Extension Development Host).
 
 ## Running Tests
@@ -51,6 +53,15 @@ Run inside a live Extension Development Host. Cover only what requires the VS Co
 
 - **Command registered** — `claudeAgentManager.openPanel` appears in `vscode.commands.getCommands()`
 - **Panel opens** — executing the command confirms a webview tab in `vscode.window.tabGroups`
+
+## TDD Workflow
+
+1. **Write a failing test** that describes the expected behaviour. Run it and confirm it fails for the right reason (feature missing, not a syntax error).
+2. **Write the minimal production code** to make the test pass — nothing more.
+3. **Verify** the test passes and no existing tests regress.
+4. **Refactor** if needed, keeping tests green.
+
+For bug fixes specifically: reproduce the bug as a failing test *before* touching production code. The test proves the fix is correct and prevents regression.
 
 ## When Adding New Features
 

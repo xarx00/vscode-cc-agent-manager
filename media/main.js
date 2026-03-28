@@ -45,6 +45,9 @@
   /** @type {Map<string, number>} projectKey → number of extra batches loaded (0 = default 8) */
   const expandedBatchCounts = new Map();
 
+  /** @type {WeakSet<Element>} tracks elements that already have sidebar event listeners */
+  const boundSidebarElements = new WeakSet();
+
   // Keyboard navigation state
   let sidebarHasFocus = true;
   let lastGPress = 0;
@@ -665,6 +668,8 @@
    */
   function bindSidebarEvents(container, closeOverlayOnSelect) {
     container.querySelectorAll('[data-action]').forEach((el) => {
+      if (boundSidebarElements.has(el)) return;
+      boundSidebarElements.add(el);
       const elTyped = /** @type {HTMLElement} */ (el);
       elTyped.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -687,6 +692,8 @@
     });
 
     container.querySelectorAll('.tree-project-header').forEach((hdr) => {
+      if (boundSidebarElements.has(hdr)) return;
+      boundSidebarElements.add(hdr);
       hdr.addEventListener('click', (e) => {
         if (/** @type {HTMLElement} */ (e.target).closest('[data-action]')) return;
         const proj = hdr.closest('.tree-project');
@@ -704,6 +711,8 @@
     });
 
     container.querySelectorAll('.tree-session').forEach((row) => {
+      if (boundSidebarElements.has(row)) return;
+      boundSidebarElements.add(row);
       const rowTyped = /** @type {HTMLElement} */ (row);
       rowTyped.addEventListener('click', (e) => {
         if (/** @type {HTMLElement} */ (e.target).closest('.tree-subagent')) return;
@@ -717,6 +726,8 @@
     });
 
     container.querySelectorAll('.tree-subagent').forEach((row) => {
+      if (boundSidebarElements.has(row)) return;
+      boundSidebarElements.add(row);
       const rowTyped = /** @type {HTMLElement} */ (row);
       rowTyped.addEventListener('click', (e) => {
         e.stopPropagation();
