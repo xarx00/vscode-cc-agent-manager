@@ -7,7 +7,7 @@
   let filterText = '';
   let activeFilter = 'all';
   let pinnedKeys = new Set();
-  let settings = { soundEnabled: false, soundRepeatSec: 0, exportDestination: 'dialog', exportToolFormat: 'compact' };
+  let settings = { soundEnabled: false, soundRepeatSec: 0, exportTemplate: '~/Documents/claude-exports/{slug}.md', exportLinkStyle: 'markdown', exportToolFormat: 'compact' };
   let previousWaitingIds = new Set();
   let soundRepeatTimer = null;
   let audioCtx = null;
@@ -88,7 +88,9 @@
     if (msg.command === 'update') {
       allProjects = msg.projects ?? [];
       if (msg.pinnedKeys) pinnedKeys = new Set(msg.pinnedKeys);
-      if (msg.settings) {
+      // Skip settings sync while the panel is open to avoid resetting the user's
+      // in-progress edits (cursor position, typed text) during auto-refresh.
+      if (msg.settings && !settingsPanel.classList.contains('open')) {
         settings = msg.settings;
         syncSettingsUI();
       }
@@ -225,6 +227,10 @@
   settingsBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     settingsPanel.classList.toggle('open');
+    // Recalculate textarea height now that the panel is visible (scrollHeight is 0 when hidden).
+    if (settingsPanel.classList.contains('open')) {
+      resizeTemplateInput();
+    }
   });
 
   document.addEventListener('click', (e) => {
@@ -264,12 +270,112 @@
     playNotificationSound();
   });
 
-  document.querySelectorAll('input[name="export-dest"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-      settings.exportDestination = radio.value;
+  const exportTemplateInput = document.getElementById('export-template');
+  const exportWikiLinksCb = document.getElementById('export-wiki-links');
+  /** Last known cursor position in the template input; null = never interacted. */
+  let exportTemplateCursorPos = null;
+
+  function resizeTemplateInput() {
+    if (!exportTemplateInput) return;
+    exportTemplateInput.style.height = 'auto';
+    exportTemplateInput.style.height = exportTemplateInput.scrollHeight + 'px';
+  }
+
+  if (exportTemplateInput) {
+    // Capture cursor position on blur so token clicks can insert at the right spot.
+    // blur fires before click, so the stored value is always from the last edit position.
+    exportTemplateInput.addEventListener('blur', () => {
+      exportTemplateCursorPos = exportTemplateInput.selectionStart;
+    });
+    // Prevent Enter from inserting newlines into a path string.
+    exportTemplateInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); }
+    });
+    exportTemplateInput.addEventListener('input', () => {
+      resizeTemplateInput();
+      settings.exportTemplate = exportTemplateInput.value;
       pushSettings();
     });
+  }
+
+  function insertTokenAtCursor(tokenText) {
+    if (!exportTemplateInput) return;
+    const val = exportTemplateInput.value;
+    let insertPos;
+
+    if (exportTemplateCursorPos === null) {
+      // Input never interacted with — insert before .md extension at end
+      const mdIdx = val.lastIndexOf('.md');
+      insertPos = mdIdx >= 0 ? mdIdx : val.length;
+    } else {
+      // If the cursor was inside a {token}, jump past its closing }
+      const before = val.slice(0, exportTemplateCursorPos);
+      const lastOpen = before.lastIndexOf('{');
+      if (lastOpen !== -1 && !before.slice(lastOpen).includes('}')) {
+        const closingBrace = val.indexOf('}', exportTemplateCursorPos);
+        insertPos = closingBrace >= 0 ? closingBrace + 1 : exportTemplateCursorPos;
+      } else {
+        insertPos = exportTemplateCursorPos;
+      }
+    }
+
+    exportTemplateInput.value = val.slice(0, insertPos) + tokenText + val.slice(insertPos);
+    const newPos = insertPos + tokenText.length;
+    exportTemplateCursorPos = newPos;
+    settings.exportTemplate = exportTemplateInput.value;
+    pushSettings();
+    resizeTemplateInput();
+    exportTemplateInput.focus();
+    // Defer selection to the next frame so the browser settles focus first,
+    // which ensures the input scrolls to show the cursor rather than the end.
+    requestAnimationFrame(() => {
+      exportTemplateInput.setSelectionRange(newPos, newPos);
+    });
+  }
+
+  document.querySelectorAll('.export-token-list .token').forEach((tokenEl) => {
+    tokenEl.addEventListener('click', () => {
+      insertTokenAtCursor(tokenEl.textContent.trim());
+    });
   });
+
+  const presetDialog = document.getElementById('preset-dialog');
+  const presetDefault = document.getElementById('preset-default');
+  const presetCwd = document.getElementById('preset-cwd');
+
+  if (presetDialog) {
+    presetDialog.addEventListener('click', () => {
+      exportTemplateInput.value = 'dialog';
+      settings.exportTemplate = 'dialog';
+      pushSettings();
+      resizeTemplateInput();
+    });
+  }
+
+  if (presetDefault) {
+    presetDefault.addEventListener('click', () => {
+      exportTemplateInput.value = '~/Documents/claude-exports/{slug}.md';
+      settings.exportTemplate = '~/Documents/claude-exports/{slug}.md';
+      pushSettings();
+      resizeTemplateInput();
+    });
+  }
+
+  if (presetCwd) {
+    presetCwd.addEventListener('click', () => {
+      exportTemplateInput.value = '{cwd}/{slug}.md';
+      settings.exportTemplate = '{cwd}/{slug}.md';
+      pushSettings();
+      resizeTemplateInput();
+    });
+  }
+
+  if (exportWikiLinksCb) {
+    exportWikiLinksCb.addEventListener('change', () => {
+      settings.exportLinkStyle = exportWikiLinksCb.checked ? 'wiki' : 'markdown';
+      pushSettings();
+    });
+  }
 
   document.querySelectorAll('input[name="export-tool"]').forEach((radio) => {
     radio.addEventListener('change', () => {
@@ -281,8 +387,13 @@
   function syncSettingsUI() {
     soundEnabledCb.checked = settings.soundEnabled;
     soundRepeatSel.value = String(settings.soundRepeatSec);
-    const destRadio = document.querySelector(`input[name="export-dest"][value="${settings.exportDestination || 'dialog'}"]`);
-    if (destRadio) destRadio.checked = true;
+    if (exportTemplateInput) {
+      exportTemplateInput.value = settings.exportTemplate || '~/Documents/claude-exports/{slug}.md';
+      resizeTemplateInput();
+    }
+    if (exportWikiLinksCb) {
+      exportWikiLinksCb.checked = settings.exportLinkStyle === 'wiki';
+    }
     const toolRadio = document.querySelector(`input[name="export-tool"][value="${settings.exportToolFormat || 'compact'}"]`);
     if (toolRadio) toolRadio.checked = true;
   }
@@ -1146,8 +1257,11 @@
   }
 
   document.addEventListener('keydown', (e) => {
-    if (document.activeElement === searchInput) {
-      if (e.key === 'Escape' || e.key === 'Enter') { searchInput.blur(); sidebarHasFocus = true; e.preventDefault(); }
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+      if (activeEl === searchInput) {
+        if (e.key === 'Escape' || e.key === 'Enter') { searchInput.blur(); sidebarHasFocus = true; e.preventDefault(); }
+      }
       return;
     }
     if (helpOverlayVisible) {

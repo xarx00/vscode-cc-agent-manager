@@ -96,7 +96,7 @@ button {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  width: 220px;
+  width: 260px;
   background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
   border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, rgba(128,128,128,0.3)));
   border-radius: 6px;
@@ -183,6 +183,86 @@ button {
 .settings-radio-row input[type="radio"] {
   accent-color: var(--vscode-textLink-foreground, #4fc1ff);
   cursor: pointer;
+}
+
+.settings-template-input {
+  width: 100%;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.3));
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  margin-bottom: 5px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
+  word-break: break-all;
+  min-height: calc(1.4em + 6px);
+}
+
+.settings-template-input:focus {
+  outline: 1px solid var(--vscode-focusBorder, #4fc1ff);
+  outline-offset: -1px;
+}
+
+.export-preset-row {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.export-preset-btn {
+  flex: 1;
+  padding: 2px 4px;
+  font-size: 10px;
+  border-radius: 3px;
+  background: var(--vscode-button-secondaryBackground, rgba(128,128,128,0.2));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.export-preset-btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(128,128,128,0.3));
+}
+
+.export-token-hint {
+  font-size: 10px;
+  margin: 2px 0 4px;
+}
+
+.export-token-hint summary {
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 0;
+}
+
+.export-token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.token {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 10px;
+  background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--vscode-textPreformat-foreground, var(--vscode-foreground));
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.token:hover {
+  background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.35));
 }
 
 /* ── Search ───────────────────────────────────────────────────────────────── */

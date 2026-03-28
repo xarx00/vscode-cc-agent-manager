@@ -12,7 +12,8 @@ import type { SubAgent, ClaudeSession, ManagerSettings, ConversationMessage } fr
 const defaultSettings: ManagerSettings = {
   soundEnabled: false,
   soundRepeatSec: 0,
-  exportDestination: 'dialog',
+  exportTemplate: '~/Documents/claude-exports/{slug}.md',
+  exportLinkStyle: 'markdown',
   exportToolFormat: 'compact',
 };
 

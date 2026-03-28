@@ -27,7 +27,40 @@
 ### 📤 Export
 
 - Save any conversation to Markdown with one click
+- **Templated export paths** — write a path template with tokens sourced from session metadata; the file is created automatically with no dialog
+- **Clickable token chips** — click any token in the Available tokens hint to insert it at the cursor position in the template
+- Three quick-access presets: **Ask each time** (save dialog), **Default path**, **Session dir**
+- **Obsidian wiki links** — toggle `[[filename|label]]` syntax for cross-links between session and agent files
 - Configurable tool output format: compact, expanded, or omit
+- Re-exporting an unchanged session reuses the existing file rather than creating a numbered copy
+
+#### Export path tokens
+
+| Token | Resolves to | Example |
+|-------|-------------|---------|
+| `{date}` | `YYYY-MM-DD` | `2026-03-27` |
+| `{yyyy}` | 4-digit year | `2026` |
+| `{yy}` | 2-digit year | `26` |
+| `{mm}` | 2-digit month | `03` |
+| `{dd}` | 2-digit day | `27` |
+| `{slug}` | First-prompt slug, up to 50 chars | `fix-auth-bug-in-login` |
+| `{short-slug}` | First-prompt slug, up to 20 chars | `fix-auth-bug-in` |
+| `{project}` | Project display name, slugified | `my-api-service` |
+| `{branch}` | Git branch, slugified; empty if none | `feature-auth` |
+| `{session-id}` | First 8 chars of session ID | `a1b2c3d4` |
+| `{cwd}` | Session working directory; empty if absent | `/Users/you/work/api` |
+
+Date tokens fall back to `session.firstTimestamp` if `lastTimestamp` is absent, and to `unknown` if both are absent. `{branch}` and `{cwd}` resolve to an empty string (never `"undefined"`) when not set.
+
+#### Example templates
+
+| Goal | Template |
+|------|----------|
+| Default (Documents folder) | `~/Documents/claude-exports/{slug}.md` |
+| Obsidian vault organized by date | `~/vault/claude/{date}/{slug}.md` |
+| Obsidian vault organized by year/month | `~/vault/claude/{yyyy}/{mm}/{slug}.md` |
+| Session working directory | `{cwd}/{slug}.md` |
+| Include project name | `~/exports/{project}/{date}-{slug}.md` |
 
 ## Installation
 

@@ -4,13 +4,14 @@ import * as path from 'path';
 import * as os from 'os';
 import { readClaudeProjects, readConversation } from './claudeReader';
 import { ManagerSettings, ClaudeProject, ClaudeSession } from './types';
-import { exportConversation } from './exporter';
+import { exportConversation, expandTemplate } from './exporter';
 import { TerminalManager } from './terminalManager';
 
 const DEFAULT_SETTINGS: ManagerSettings = {
   soundEnabled: false,
   soundRepeatSec: 0,
-  exportDestination: 'dialog',
+  exportTemplate: '~/Documents/claude-exports/{slug}.md',
+  exportLinkStyle: 'markdown',
   exportToolFormat: 'compact',
 };
 
@@ -212,7 +213,20 @@ export class AgentManagerPanel {
   }
 
   private _getSettings(): ManagerSettings {
-    return this._context.globalState.get<ManagerSettings>('managerSettings', DEFAULT_SETTINGS);
+    const stored = this._context.globalState.get<Record<string, unknown>>('managerSettings');
+    if (!stored) return { ...DEFAULT_SETTINGS };
+
+    // Migration: convert old exportDestination to exportTemplate on first load after upgrade
+    if (stored['exportDestination'] !== undefined && stored['exportTemplate'] === undefined) {
+      switch (stored['exportDestination']) {
+        case 'dialog': stored['exportTemplate'] = 'dialog'; break;
+        case 'cwd': stored['exportTemplate'] = '{cwd}/{slug}.md'; break;
+        default: stored['exportTemplate'] = '~/Documents/claude-exports/{slug}.md';
+      }
+      void this._context.globalState.update('managerSettings', stored);
+    }
+
+    return { ...DEFAULT_SETTINGS, ...stored } as ManagerSettings;
   }
 
   private _togglePin(key: string): void {
@@ -336,7 +350,7 @@ export class AgentManagerPanel {
       }
 
       const settings = this._getSettings();
-      const outPath = await this._resolveExportPath(session, settings);
+      const outPath = await this._resolveExportPath(session, project, settings);
       if (!outPath) {
         // User cancelled dialog — silent abort
         this._panel.webview.postMessage({ command: 'exportDone' });
@@ -363,35 +377,31 @@ export class AgentManagerPanel {
     }
   }
 
-  private _exportFilename(session: ClaudeSession): string {
-    const raw = session.firstPrompt ?? session.sessionId.slice(0, 8);
-    const slug = raw
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 50);
-    return `${slug}.md`;
-  }
-
   private async _resolveExportPath(
     session: ClaudeSession,
+    project: ClaudeProject,
     settings: ManagerSettings,
   ): Promise<string | undefined> {
-    const filename = this._exportFilename(session);
+    const template = settings.exportTemplate ?? 'dialog';
 
-    if (settings.exportDestination === 'dialog') {
+    if (template === 'dialog') {
+      const raw = session.firstPrompt ?? session.sessionId.slice(0, 8);
+      const filename = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) + '.md';
       return this._showSaveDialog(filename);
     }
 
-    if (settings.exportDestination === 'cwd') {
-      if (!session.cwd) {
-        return this._showSaveDialog(filename);
-      }
-      return path.join(session.cwd, filename);
+    const resolved = expandTemplate(template, session, project);
+    if (!resolved) {
+      vscode.window.showWarningMessage(
+        'Export template resolved to an invalid path. Please update your export template in settings.'
+      );
+      const raw = session.firstPrompt ?? session.sessionId.slice(0, 8);
+      const filename = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) + '.md';
+      return this._showSaveDialog(filename);
     }
 
-    // 'default'
-    const dir = path.join(os.homedir(), 'Documents', 'claude-exports');
+    // Create directory
+    const dir = path.dirname(resolved);
     try {
       fs.mkdirSync(dir, { recursive: true });
     } catch (e: unknown) {
@@ -400,12 +410,17 @@ export class AgentManagerPanel {
       );
       return undefined;
     }
-    return path.join(dir, filename);
+
+    // Collision handling and content dedup are done inside exportConversation
+    return resolved;
   }
 
-  private async _showSaveDialog(filename: string): Promise<string | undefined> {
+  private async _showSaveDialog(filename: string, fullPath?: string): Promise<string | undefined> {
+    const defaultUri = fullPath
+      ? vscode.Uri.file(fullPath)
+      : vscode.Uri.file(path.join(os.homedir(), 'Documents', filename));
     const uri = await vscode.window.showSaveDialog({
-      defaultUri: vscode.Uri.file(path.join(os.homedir(), 'Documents', filename)),
+      defaultUri,
       filters: { 'Markdown': ['md'] },
     });
     return uri?.fsPath;
@@ -467,18 +482,24 @@ export class AgentManagerPanel {
               <button class="settings-test-btn" id="test-sound-btn">Test sound</button>
               <div class="settings-divider"></div>
               <div class="settings-title">Export Settings</div>
-              <div class="settings-group-label">Destination</div>
-              <label class="settings-radio-row">
-                <input type="radio" name="export-dest" value="dialog" id="export-dest-dialog" />
-                <span>Save As dialog</span>
-              </label>
-              <label class="settings-radio-row">
-                <input type="radio" name="export-dest" value="default" id="export-dest-default" />
-                <span>~/Documents/claude-exports/</span>
-              </label>
-              <label class="settings-radio-row">
-                <input type="radio" name="export-dest" value="cwd" id="export-dest-cwd" />
-                <span>Session working dir</span>
+              <div class="settings-group-label">Export path</div>
+              <textarea id="export-template" class="settings-template-input" placeholder="~/Documents/claude-exports/{slug}.md" rows="1" spellcheck="false"></textarea>
+              <div class="export-preset-row">
+                <button class="export-preset-btn" id="preset-dialog">Ask each time</button>
+                <button class="export-preset-btn" id="preset-default">Default path</button>
+                <button class="export-preset-btn" id="preset-cwd">Session dir</button>
+              </div>
+              <details class="export-token-hint">
+                <summary>Available tokens</summary>
+                <div class="export-token-list">
+                  <span class="token">{date}</span> <span class="token">{yyyy}</span> <span class="token">{yy}</span> <span class="token">{mm}</span> <span class="token">{dd}</span>
+                  <span class="token">{slug}</span> <span class="token">{short-slug}</span> <span class="token">{project}</span>
+                  <span class="token">{branch}</span> <span class="token">{session-id}</span> <span class="token">{cwd}</span>
+                </div>
+              </details>
+              <label class="settings-row">
+                <input type="checkbox" id="export-wiki-links" />
+                <span>Use Obsidian wiki links ([[…]])</span>
               </label>
               <div class="settings-group-label">Tool calls</div>
               <label class="settings-radio-row">
