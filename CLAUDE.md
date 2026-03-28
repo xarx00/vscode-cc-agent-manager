@@ -21,6 +21,10 @@ A VSCode extension that reads Claude Code session data from `~/.claude/projects/
 - [docs/development.md](docs/development.md) — setup, project structure, build, packaging
 - [docs/testing.md](docs/testing.md) — test structure, Jest unit tests, Mocha integration tests, what to test when adding features
 
+## Test-Driven Development
+
+All changes follow TDD: write a failing test first, then write the minimal code to pass it. For bug fixes, reproduce the bug as a failing test before touching production code. See [docs/testing.md](docs/testing.md) for the workflow and test structure.
+
 ## Spec-Driven Development
 
 New features and significant changes start with a spec in `docs/superpowers/specs/`. Specs are approved before implementation begins. Corresponding, untracked, implementation plans live in `docs/superpowers/plans/`.
