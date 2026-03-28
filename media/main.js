@@ -42,6 +42,9 @@
   /** @type {Set<string>} */
   let expandedProjectKeys = new Set();
 
+  /** @type {Map<string, number>} projectKey → number of extra batches loaded (0 = default 8) */
+  const expandedBatchCounts = new Map();
+
   // Keyboard navigation state
   let sidebarHasFocus = true;
   let lastGPress = 0;
@@ -142,6 +145,7 @@
 
   // ── Toolbar ──────────────────────────────────────────────────────────────────
   document.getElementById('refresh-btn').addEventListener('click', () => {
+    expandedBatchCounts.clear();
     document.getElementById('last-updated').textContent = '…';
     vscode.postMessage({ command: 'refresh' });
   });
@@ -667,6 +671,18 @@
         const action = elTyped.dataset.action;
         if (action === 'open') vscode.postMessage({ command: 'openFolder', path: elTyped.dataset.path });
         if (action === 'pin') vscode.postMessage({ command: 'togglePin', key: elTyped.dataset.key });
+        if (action === 'load-more') {
+          const key = elTyped.dataset.key;
+          expandedBatchCounts.set(key, (expandedBatchCounts.get(key) || 0) + 1);
+          const projData = allProjects.find((p) => p.key === key);
+          if (projData) {
+            const el = container.querySelector(`.tree-project[data-key="${CSS.escape(key)}"]`);
+            if (el) {
+              el.outerHTML = renderProject(projData);
+              bindSidebarEvents(container, closeOverlayOnSelect);
+            }
+          }
+        }
       });
     });
 
@@ -891,7 +907,9 @@
   function renderProject(project) {
     const status = projectStatusClass(project);
     const isPinned = pinnedKeys.has(project.key);
-    const recentSessions = project.sessions.slice(0, 8);
+    const batchCount = expandedBatchCounts.get(project.key) || 0;
+    const visibleCount = 8 + batchCount * 8;
+    const recentSessions = project.sessions.slice(0, visibleCount);
     const overflow = project.sessions.length - recentSessions.length;
 
     const isCollapsed = !expandedProjectKeys.has(project.key);
@@ -910,7 +928,7 @@
   </div>
   <div class="tree-children">
     ${recentSessions.map((s) => renderSession(s, project.key)).join('')}
-    ${overflow > 0 ? `<div class="tree-overflow">+${overflow} older</div>` : ''}
+    ${overflow > 0 ? `<button class="btn-load-more" data-action="load-more" data-key="${esc(project.key)}">Load 8 more (${overflow} remaining)</button>` : ''}
   </div>
 </div>`;
   }
