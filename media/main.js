@@ -88,7 +88,9 @@
     if (msg.command === 'update') {
       allProjects = msg.projects ?? [];
       if (msg.pinnedKeys) pinnedKeys = new Set(msg.pinnedKeys);
-      if (msg.settings) {
+      // Skip settings sync while the panel is open to avoid resetting the user's
+      // in-progress edits (cursor position, typed text) during auto-refresh.
+      if (msg.settings && !settingsPanel.classList.contains('open')) {
         settings = msg.settings;
         syncSettingsUI();
       }
