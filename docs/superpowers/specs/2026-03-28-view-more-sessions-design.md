@@ -41,6 +41,18 @@ ${remaining > 0
   : ''}
 ```
 
+## Manual Refresh Reset
+
+The refresh button click handler clears `expandedBatchCounts` before posting the refresh message, resetting all projects back to the default 8 sessions. This provides a deliberate escape hatch if the load-more state gets into a bad state. The auto-refresh (30s timer and file-watcher) does **not** clear the map, preserving expanded state across background updates.
+
+```js
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  expandedBatchCounts.clear();
+  document.getElementById('last-updated').textContent = '…';
+  vscode.postMessage({ command: 'refresh' });
+});
+```
+
 ## Click Handler
 
 Added to the existing `data-action` event delegation block:
@@ -95,6 +107,7 @@ No changes to `agentManagerPanel.ts`, `claudeReader.ts`, or `types.ts`.
 - [ ] Clicking the button reveals the next 8 sessions and updates the remaining count
 - [ ] When all sessions are visible, the button is not rendered
 - [ ] The expanded batch count survives the 30s auto-refresh and file-watcher refreshes
+- [ ] Clicking the manual refresh button resets all expanded batch counts (projects return to showing 8 sessions)
 - [ ] Sessions with new activity continue to appear in their sorted position (no special handling needed — `project.sessions` is already sorted by recency)
 - [ ] The button uses VS Code theme variables for colors and border
 - [ ] No changes required to the extension host

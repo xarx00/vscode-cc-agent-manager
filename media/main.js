@@ -145,6 +145,7 @@
 
   // ── Toolbar ──────────────────────────────────────────────────────────────────
   document.getElementById('refresh-btn').addEventListener('click', () => {
+    expandedBatchCounts.clear();
     document.getElementById('last-updated').textContent = '…';
     vscode.postMessage({ command: 'refresh' });
   });
