@@ -1025,7 +1025,7 @@
     <span class="tree-time">${timeAgo(project.lastActivity)}</span>
     <div class="tree-project-actions">
       <button class="btn-pin${isPinned ? ' pinned' : ''}" data-action="pin" data-key="${esc(project.key)}" title="${isPinned ? 'Unpin' : 'Pin'}">&#9733;</button>
-      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open project">&#8594;</button>
+      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open in VS Code">&#8594;</button>
     </div>
   </div>
   <div class="tree-children">
