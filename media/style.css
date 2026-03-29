@@ -1335,9 +1335,12 @@ button {
 #tab-bar {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.15));
   padding: 0 12px;
   flex-shrink: 0;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  min-height: 38px;
+  align-items: center;
 }
 
 .tab-btn {
