@@ -1884,7 +1884,7 @@
   }
 
   function renderAboutView() {
-    const superpowers = [
+    const productivity = [
       {
         name: 'Agents',
         icon: '\u{1F4AC}',
@@ -1896,12 +1896,6 @@
         icon: '\u{1F4CA}',
         desc: 'Per-project analytics: top tools, session activity heatmap, prompt volume, code output, and duration metrics. All computed from your existing session data.',
         ready: true,
-      },
-      {
-        name: 'Bashback',
-        icon: '\u{1F4BB}',
-        desc: 'Study the bash commands Claude uses. Augmented history with flag decomposition, man page parsing, quiz mode, and generated exercises.',
-        ready: false,
       },
       {
         name: 'Tips',
@@ -1921,6 +1915,15 @@
         desc: 'Intelligent permission layer. Rule-based auto-approve, risk scoring for destructive commands, audit trail, and learning mode.',
         ready: false,
       },
+    ];
+
+    const learning = [
+      {
+        name: 'Bashback',
+        icon: '\u{1F4BB}',
+        desc: 'Study the bash commands Claude uses. Augmented history with flag decomposition, man page parsing, quiz mode, and generated exercises.',
+        ready: false,
+      },
       {
         name: 'Grammar Check',
         icon: '\u{1F4DD}',
@@ -1929,6 +1932,21 @@
       },
     ];
 
+    function renderCards(cards) {
+      let out = '';
+      for (const sp of cards) {
+        out += `<div class="about-card${sp.ready ? '' : ' about-card-soon'}">
+          <div class="about-card-header">
+            <span class="about-card-icon">${sp.icon}</span>
+            <span class="about-card-name">${esc(sp.name)}</span>
+            ${sp.ready ? '' : '<span class="about-badge-soon">SOON</span>'}
+          </div>
+          <div class="about-card-desc">${esc(sp.desc)}</div>
+        </div>`;
+      }
+      return out;
+    }
+
     let html = `<div class="about-view">`;
     html += `<div class="about-header">
       <div class="about-title">Claude Code Agent Manager</div>
@@ -1936,21 +1954,14 @@
     </div>`;
 
     html += `<div class="about-section">
-      <div class="about-section-title">Superpowers</div>
-      <div class="about-grid">`;
+      <div class="about-section-title">Productivity</div>
+      <div class="about-grid">${renderCards(productivity)}</div>
+    </div>`;
 
-    for (const sp of superpowers) {
-      html += `<div class="about-card${sp.ready ? '' : ' about-card-soon'}">
-        <div class="about-card-header">
-          <span class="about-card-icon">${sp.icon}</span>
-          <span class="about-card-name">${esc(sp.name)}</span>
-          ${sp.ready ? '' : '<span class="about-badge-soon">SOON</span>'}
-        </div>
-        <div class="about-card-desc">${esc(sp.desc)}</div>
-      </div>`;
-    }
-
-    html += `</div></div>`;
+    html += `<div class="about-section">
+      <div class="about-section-title">Learning</div>
+      <div class="about-grid">${renderCards(learning)}</div>
+    </div>`;
 
     html += `<div class="about-section">
       <div class="about-section-title">Keyboard Shortcuts</div>
