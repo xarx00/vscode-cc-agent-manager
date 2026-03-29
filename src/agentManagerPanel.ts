@@ -548,6 +548,7 @@ export class AgentManagerPanel {
       <div id="tab-bar">
         <button class="tab-btn active" data-tab="sessions">Agents</button>
         <button class="tab-btn" data-tab="stats">Stats</button>
+        <button class="tab-btn" data-tab="about">About</button>
       </div>
       <div id="conversation-header">
         <span id="conv-breadcrumb">Select a session to view its conversation</span>

@@ -1578,8 +1578,9 @@
       tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
       if (tab === 'stats') {
         showStats();
+      } else if (tab === 'about') {
+        showAbout();
       } else {
-        // Restore conversation view if a session was selected
         hideStats();
       }
     });
@@ -1843,6 +1844,112 @@
   function renderAllSessionsEntry() {
     const isSelected = activeTab === 'stats' && statsProjectKey === null;
     return `<div class="tree-all-sessions${isSelected ? ' selected' : ''}" data-action="select-all">All sessions</div>`;
+  }
+
+  // ── About view ─────────────────────────────────────────────────────────────
+  function showAbout() {
+    const convContainer = document.getElementById('conversation-container');
+    const convHeader = document.getElementById('conversation-header');
+    const sendBar = document.getElementById('send-bar');
+    if (convHeader) convHeader.style.display = 'none';
+    if (sendBar) sendBar.style.display = 'none';
+    if (convContainer) {
+      convContainer.innerHTML = renderAboutView();
+      convContainer.style.display = '';
+    }
+  }
+
+  function renderAboutView() {
+    const superpowers = [
+      {
+        name: 'Agents',
+        icon: '\u{1F4AC}',
+        desc: 'Live dashboard of all your Claude Code sessions and subagents across every workspace. Monitor status, read conversations, send messages, and export to Markdown.',
+        ready: true,
+      },
+      {
+        name: 'Usage Stats',
+        icon: '\u{1F4CA}',
+        desc: 'Per-project analytics: top tools, session activity heatmap, prompt volume, code output, and duration metrics. All computed from your existing session data.',
+        ready: true,
+      },
+      {
+        name: 'Bashback',
+        icon: '\u{1F4BB}',
+        desc: 'Study the bash commands Claude uses. Augmented history with flag decomposition, man page parsing, quiz mode, and generated exercises.',
+        ready: false,
+      },
+      {
+        name: 'Tips',
+        icon: '\u{1F4A1}',
+        desc: 'Contextual tip engine with declarative rules, severity levels, and awareness of your custom agents, skills, and hooks. Detects unused assets.',
+        ready: false,
+      },
+      {
+        name: 'Health',
+        icon: '\u{1F3E5}',
+        desc: 'Hook health dashboard. Validates exit codes, checks dependencies, detects stale hooks, and shows green/yellow/red status per hook.',
+        ready: false,
+      },
+      {
+        name: 'Yolobash',
+        icon: '\u{1F6E1}',
+        desc: 'Intelligent permission layer. Rule-based auto-approve, risk scoring for destructive commands, audit trail, and learning mode.',
+        ready: false,
+      },
+      {
+        name: 'Grammar Check',
+        icon: '\u{1F4DD}',
+        desc: 'Prompt quality feedback. Clarity analysis, rewrite suggestions, pattern tracking, and grammar/spelling checks for non-native speakers.',
+        ready: false,
+      },
+    ];
+
+    let html = `<div class="about-view">`;
+    html += `<div class="about-header">
+      <div class="about-title">Claude Code Agent Manager</div>
+      <div class="about-subtitle">The companion tool for serious Claude Code users</div>
+    </div>`;
+
+    html += `<div class="about-section">
+      <div class="about-section-title">Superpowers</div>
+      <div class="about-grid">`;
+
+    for (const sp of superpowers) {
+      html += `<div class="about-card${sp.ready ? '' : ' about-card-soon'}">
+        <div class="about-card-header">
+          <span class="about-card-icon">${sp.icon}</span>
+          <span class="about-card-name">${esc(sp.name)}</span>
+          ${sp.ready ? '' : '<span class="about-badge-soon">SOON</span>'}
+        </div>
+        <div class="about-card-desc">${esc(sp.desc)}</div>
+      </div>`;
+    }
+
+    html += `</div></div>`;
+
+    html += `<div class="about-section">
+      <div class="about-section-title">Keyboard Shortcuts</div>
+      <div class="about-shortcuts">
+        <div class="about-shortcut"><kbd>j</kbd> / <kbd>k</kbd> Navigate sessions</div>
+        <div class="about-shortcut"><kbd>Enter</kbd> Open conversation</div>
+        <div class="about-shortcut"><kbd>h</kbd> / <kbd>l</kbd> Collapse / Expand</div>
+        <div class="about-shortcut"><kbd>p</kbd> Pin / Unpin project</div>
+        <div class="about-shortcut"><kbd>g</kbd><kbd>g</kbd> Jump to top</div>
+        <div class="about-shortcut"><kbd>G</kbd> Jump to bottom</div>
+        <div class="about-shortcut"><kbd>/</kbd> Focus search</div>
+        <div class="about-shortcut"><kbd>?</kbd> Toggle help</div>
+      </div>
+    </div>`;
+
+    html += `<div class="about-footer">
+      <a href="https://github.com/KyleJamesWalker/vscode-cc-agent-manager">GitHub</a>
+      <span class="about-footer-sep">\u00B7</span>
+      <span>Ctrl+Shift+A to open</span>
+    </div>`;
+
+    html += `</div>`;
+    return html;
   }
 
   // Configure marked for safe rendering
