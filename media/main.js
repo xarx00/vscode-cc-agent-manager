@@ -1490,6 +1490,23 @@
         e.preventDefault(); searchInput.focus(); searchInput.select(); sidebarHasFocus = false; break;
       case '?':
         e.preventDefault(); showHelpOverlay(); break;
+      case '1':
+      case '2':
+      case '3': {
+        const tabs = ['sessions', 'stats', 'about'];
+        const idx = Number(e.key) - 1;
+        const tab = tabs[idx];
+        if (tab && tab !== activeTab) {
+          activeTab = tab;
+          const tabBar = document.getElementById('tab-bar');
+          if (tabBar) tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+          if (tab === 'stats') showStats();
+          else if (tab === 'about') showAbout();
+          else hideStats();
+        }
+        e.preventDefault();
+        break;
+      }
       case 'Tab': {
         e.preventDefault();
         sidebarHasFocus = !sidebarHasFocus;
@@ -1525,6 +1542,9 @@
         <div class="help-key">/</div><div class="help-desc">Focus search</div>
         <div class="help-key">?</div><div class="help-desc">This help</div>
         <div class="help-key">Tab</div><div class="help-desc">Switch sidebar / conversation</div>
+        <div class="help-key">1</div><div class="help-desc">Agents tab</div>
+        <div class="help-key">2</div><div class="help-desc">Stats tab</div>
+        <div class="help-key">3</div><div class="help-desc">About tab</div>
       </div>
       <div class="help-dismiss">Press Escape to close</div>
     </div>`;
@@ -1939,6 +1959,9 @@
         <div class="about-shortcut"><kbd>G</kbd> Jump to bottom</div>
         <div class="about-shortcut"><kbd>/</kbd> Focus search</div>
         <div class="about-shortcut"><kbd>?</kbd> Toggle help</div>
+        <div class="about-shortcut"><kbd>1</kbd> Agents tab</div>
+        <div class="about-shortcut"><kbd>2</kbd> Stats tab</div>
+        <div class="about-shortcut"><kbd>3</kbd> About tab</div>
       </div>
     </div>`;
 
