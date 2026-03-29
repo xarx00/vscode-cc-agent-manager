@@ -327,25 +327,8 @@ button {
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  border-bottom: none;
-  flex-shrink: 0;
-}
-
-.status-legend {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 12px 5px;
   border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.1));
   flex-shrink: 0;
-}
-
-.status-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 9px;
-  color: var(--vscode-descriptionForeground);
 }
 
 .filter-chip {
@@ -370,6 +353,11 @@ button {
   background: var(--vscode-textLink-foreground, #4fc1ff);
   color: #fff;
   border-color: transparent;
+}
+
+.filter-chip .status-dot {
+  animation: none;
+  box-shadow: none;
 }
 
 .filter-count {

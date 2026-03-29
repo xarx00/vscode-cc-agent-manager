@@ -485,6 +485,12 @@
     return (Date.now() - new Date(project.lastActivity).getTime()) < 5 * 60 * 1000;
   }
 
+  function isProjectRecent(project) {
+    if (!project.lastActivity) return false;
+    const age = Date.now() - new Date(project.lastActivity).getTime();
+    return age >= 5 * 60 * 1000 && age < 60 * 60 * 1000;
+  }
+
   function checkWaitingAndNotify() {
     // Only track sessions for sound notifications, not subagents
     const waitingIds = new Set();
@@ -526,6 +532,8 @@
       list = list.filter((p) => isProjectActive(p));
     } else if (activeFilter === 'waiting') {
       list = list.filter((p) => isProjectWaiting(p));
+    } else if (activeFilter === 'recent') {
+      list = list.filter((p) => isProjectRecent(p));
     } else if (activeFilter === 'pinned') {
       list = list.filter((p) => pinnedKeys.has(p.key));
     }
@@ -970,6 +978,7 @@
   function updateFilterCounts() {
     const activeCount = allProjects.filter((p) => isProjectActive(p)).length;
     const waitingCount = allProjects.filter((p) => isProjectWaiting(p)).length;
+    const recentCount = allProjects.filter((p) => isProjectRecent(p)).length;
     const pinnedCount = allProjects.filter((p) => pinnedKeys.has(p.key)).length;
 
     filterBar.querySelectorAll('.filter-chip').forEach((chip) => {
@@ -978,6 +987,7 @@
       let count = 0;
       if (f === 'active') count = activeCount;
       else if (f === 'waiting') count = waitingCount;
+      else if (f === 'recent') count = recentCount;
       else if (f === 'pinned') count = pinnedCount;
 
       if (f !== 'all' && count > 0) {

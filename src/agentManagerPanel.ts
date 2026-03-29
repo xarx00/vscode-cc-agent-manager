@@ -528,17 +528,10 @@ export class AgentManagerPanel {
 
       <div class="filter-bar" id="filter-bar">
         <button class="filter-chip selected" data-filter="all">All</button>
-        <button class="filter-chip" data-filter="active">Active</button>
-        <button class="filter-chip" data-filter="waiting">Waiting</button>
+        <button class="filter-chip" data-filter="active"><span class="status-dot tiny active"></span>Active</button>
+        <button class="filter-chip" data-filter="waiting"><span class="status-dot tiny waiting"></span>Waiting</button>
+        <button class="filter-chip" data-filter="recent"><span class="status-dot tiny recent"></span>Recent</button>
         <button class="filter-chip" data-filter="pinned">Pinned</button>
-      </div>
-
-      <div class="status-legend">
-        <span class="status-legend-item"><span class="status-dot small active"></span>Active</span>
-        <span class="status-legend-item"><span class="status-dot small thinking"></span>Thinking</span>
-        <span class="status-legend-item"><span class="status-dot small waiting"></span>Waiting</span>
-        <span class="status-legend-item"><span class="status-dot small recent"></span>Recent</span>
-        <span class="status-legend-item"><span class="status-dot small idle"></span>Idle</span>
       </div>
 
       <div id="projects-container">
