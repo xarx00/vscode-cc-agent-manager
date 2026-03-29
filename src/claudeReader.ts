@@ -91,6 +91,45 @@ function getLastContentBlockType(msg: { type: string; message?: { content?: unkn
   return undefined;
 }
 
+function countLines(text: string | undefined): number {
+  if (!text) return 0;
+  return text.split('\n').length;
+}
+
+function countContentLines(content: string | ContentItem[] | undefined): number {
+  if (typeof content === 'string') return countLines(content);
+  if (!Array.isArray(content)) return 0;
+  let total = 0;
+  for (const item of content) {
+    if (item.type === 'text' && item.text) total += countLines(item.text);
+  }
+  return total;
+}
+
+function countContentChars(content: string | ContentItem[] | undefined): number {
+  if (typeof content === 'string') return content.length;
+  if (!Array.isArray(content)) return 0;
+  let total = 0;
+  for (const item of content) {
+    if (item.type === 'text' && item.text) total += item.text.length;
+  }
+  return total;
+}
+
+function countCodeLines(content: ContentItem[] | undefined): number {
+  if (!Array.isArray(content)) return 0;
+  let total = 0;
+  for (const item of content) {
+    if (item.type === 'tool_use' && item.input) {
+      if (item.name === 'Write' || item.name === 'Edit') {
+        const c = item.input.content ?? item.input.new_string;
+        if (typeof c === 'string') total += countLines(c);
+      }
+    }
+  }
+  return total;
+}
+
 function parseSubAgent(agentFilePath: string): SubAgent | null {
   const messages = parseJsonlFile(agentFilePath);
   if (messages.length === 0) return null;
@@ -103,6 +142,10 @@ function parseSubAgent(agentFilePath: string): SubAgent | null {
   let messageCount = 0;
   let lastMessageRole: string | undefined;
   let lastContentBlockType: string | undefined;
+  const toolCounts: Record<string, number> = {};
+  let userChars = 0;
+  let assistantLines = 0;
+  let codeLines = 0;
 
   for (const msg of messages) {
     if (msg.timestamp) {
@@ -123,12 +166,27 @@ function parseSubAgent(agentFilePath: string): SubAgent | null {
       lastMessageRole = msg.type;
       lastContentBlockType = getLastContentBlockType(msg);
     }
+
+    if (msg.type === 'user' && !msg.isMeta) {
+      userChars += countContentChars(msg.message?.content);
+    }
+
+    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+      assistantLines += countContentLines(msg.message?.content);
+      codeLines += countCodeLines(msg.message?.content as ContentItem[]);
+      for (const item of msg.message!.content as ContentItem[]) {
+        if (item.type === 'tool_use' && item.name) {
+          toolCounts[item.name] = (toolCounts[item.name] || 0) + 1;
+        }
+      }
+    }
   }
 
   return {
     agentId, slug, firstPrompt, firstTimestamp, lastTimestamp, messageCount,
     lastMessageRole,
     status: deriveStatus(lastMessageRole, lastContentBlockType),
+    toolCounts, userChars, assistantLines, codeLines,
   };
 }
 
@@ -147,6 +205,10 @@ function parseSession(
   let messageCount = 0;
   let lastMessageRole: string | undefined;
   let lastContentBlockType: string | undefined;
+  const toolCounts: Record<string, number> = {};
+  let userChars = 0;
+  let assistantLines = 0;
+  let codeLines = 0;
 
   for (const msg of messages) {
     if (msg.timestamp) {
@@ -167,6 +229,20 @@ function parseSession(
       messageCount++;
       lastMessageRole = msg.type;
       lastContentBlockType = getLastContentBlockType(msg);
+    }
+
+    if (msg.type === 'user' && !msg.isMeta) {
+      userChars += countContentChars(msg.message?.content);
+    }
+
+    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+      assistantLines += countContentLines(msg.message?.content);
+      codeLines += countCodeLines(msg.message?.content as ContentItem[]);
+      for (const item of msg.message!.content as ContentItem[]) {
+        if (item.type === 'tool_use' && item.name) {
+          toolCounts[item.name] = (toolCounts[item.name] || 0) + 1;
+        }
+      }
     }
   }
 
@@ -204,6 +280,7 @@ function parseSession(
     subAgents,
     lastMessageRole,
     status: deriveStatus(lastMessageRole, lastContentBlockType),
+    toolCounts, userChars, assistantLines, codeLines,
   };
 }
 
