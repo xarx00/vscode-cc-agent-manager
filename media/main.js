@@ -125,14 +125,18 @@
       hasLiveTerminal = false;
       const focusBtn = document.getElementById('focus-btn');
       if (focusBtn) focusBtn.style.display = 'none';
-      renderConversation(msg.messages, msg.sessionId, msg.agentId);
+      if (activeTab === 'sessions') {
+        renderConversation(msg.messages, msg.sessionId, msg.agentId);
+      }
     }
     if (msg.command === 'exportDone') {
       exportInProgress = false;
       exportBtn.disabled = false;
     }
     if (msg.command === 'conversationTail') {
-      handleConversationTail(msg.messages, msg.sessionId, msg.agentId);
+      if (activeTab === 'sessions') {
+        handleConversationTail(msg.messages, msg.sessionId, msg.agentId);
+      }
     }
     if (msg.command === 'sidebarRowUpdate') {
       handleSidebarRowUpdate(msg);
