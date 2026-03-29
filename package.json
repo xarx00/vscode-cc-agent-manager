@@ -46,7 +46,31 @@
           "command": "claudeAgentManager.openPanel"
         }
       ]
-    }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claude-agent-manager",
+          "title": "Claude Agent Manager",
+          "icon": "resources/activity-bar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "claude-agent-manager": [
+        {
+          "id": "claudeAgentManager.welcome",
+          "name": "Agent Manager",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "claudeAgentManager.welcome",
+        "contents": "Open the Agent Manager dashboard.\n[Open Agent Manager](command:claudeAgentManager.openPanel)"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

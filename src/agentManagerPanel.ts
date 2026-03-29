@@ -527,7 +527,6 @@ export class AgentManagerPanel {
       </div>
 
       <div class="filter-bar" id="filter-bar">
-        <button class="filter-chip selected" data-filter="all">All</button>
         <button class="filter-chip" data-filter="active"><span class="status-dot tiny active"></span>Active</button>
         <button class="filter-chip" data-filter="waiting"><span class="status-dot tiny waiting"></span>Waiting</button>
         <button class="filter-chip" data-filter="recent"><span class="status-dot tiny recent"></span>Recent</button>

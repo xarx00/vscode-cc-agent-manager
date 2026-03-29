@@ -203,7 +203,12 @@
   filterBar.addEventListener('click', (e) => {
     const chip = e.target.closest('.filter-chip');
     if (!chip) return;
-    activeFilter = chip.dataset.filter;
+    // Toggle: clicking the active filter deselects it (back to all)
+    if (chip.classList.contains('selected')) {
+      activeFilter = 'all';
+    } else {
+      activeFilter = chip.dataset.filter;
+    }
     filterBar.querySelectorAll('.filter-chip').forEach((c) => {
       c.classList.toggle('selected', c.dataset.filter === activeFilter);
     });
@@ -725,12 +730,9 @@
         const action = elTyped.dataset.action;
         if (action === 'select-all') {
           statsProjectKey = null;
-          if (activeTab !== 'stats') {
-            activeTab = 'stats';
-            const tabBar = document.getElementById('tab-bar');
-            if (tabBar) tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === 'stats'));
+          if (activeTab === 'stats') {
+            showStats();
           }
-          showStats();
           applySelectedState();
           return;
         }
