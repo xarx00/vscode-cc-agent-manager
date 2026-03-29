@@ -471,22 +471,18 @@ button {
 /* ── Project Actions (hover-reveal) ──────────────────────────────────────── */
 .tree-project-actions {
   display: flex;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
 }
 
-.tree-project-header:hover .tree-project-actions { opacity: 1; }
-
 .btn-pin {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1;
-  padding: 1px 3px;
+  padding: 2px 4px;
   border-radius: 3px;
   background: transparent;
   color: var(--vscode-descriptionForeground);
-  opacity: 0.3;
+  opacity: 0.35;
   transition: opacity 0.15s, color 0.15s;
 }
 
@@ -495,13 +491,13 @@ button {
 .tree-project.pinned .btn-pin { opacity: 1; }
 
 .btn-action {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1;
-  padding: 1px 4px;
+  padding: 2px 4px;
   border-radius: 3px;
   background: transparent;
   color: var(--vscode-descriptionForeground);
-  opacity: 0.5;
+  opacity: 0.4;
   transition: opacity 0.15s, background 0.15s;
 }
 

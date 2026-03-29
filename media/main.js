@@ -1028,7 +1028,7 @@
     <span class="tree-time">${timeAgo(project.lastActivity)}</span>
     <div class="tree-project-actions">
       <button class="btn-pin${isPinned ? ' pinned' : ''}" data-action="pin" data-key="${esc(project.key)}" title="${isPinned ? 'Unpin' : 'Pin'}">&#9733;</button>
-      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open in VS Code"${project.peacockColor ? ` data-peacock="${esc(project.peacockColor)}"` : ''}>&#8594;</button>
+      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open in VS Code"${project.peacockColor ? ` data-peacock="${esc(project.peacockColor)}"` : ''}><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1h6v1H2v12h12V8.5h1v6.5H1V1h.5zM9 1h6v6h-1V2.7L7.4 9.3l-.7-.7L13.3 2H9V1z"/></svg></button>
     </div>
   </div>
   <div class="tree-children">
