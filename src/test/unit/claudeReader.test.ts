@@ -231,6 +231,67 @@ describe('readClaudeProjects', () => {
   });
 });
 
+describe('toolCounts (via readClaudeProjects)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const recentTs = () => new Date().toISOString();
+
+  function setupSingleProject(jsonlContent: string): void {
+    jest.mocked(fs.existsSync).mockImplementation((p) => p === PROJECTS);
+    jest.mocked(fs.readdirSync)
+      .mockReturnValueOnce(['proj1'] as any)
+      .mockReturnValueOnce(['session.jsonl'] as any);
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
+    jest.mocked(fs.readFileSync).mockReturnValue(jsonlContent);
+  }
+
+  test('counts tool_use items in assistant messages', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({
+        type: 'assistant', timestamp: recentTs(),
+        message: { content: [
+          { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: '/foo.ts' } },
+          { type: 'tool_use', id: 'tu2', name: 'Bash', input: { command: 'ls' } },
+        ] },
+      }),
+      JSON.stringify({
+        type: 'assistant', timestamp: recentTs(),
+        message: { content: [
+          { type: 'tool_use', id: 'tu3', name: 'Read', input: { file_path: '/bar.ts' } },
+          { type: 'text', text: 'Done' },
+        ] },
+      }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].toolCounts).toEqual({ Read: 2, Bash: 1 });
+  });
+
+  test('returns empty toolCounts when no tool_use items exist', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'Hi' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].toolCounts).toEqual({});
+  });
+
+  test('ignores tool_use in user messages', () => {
+    const lines = [
+      JSON.stringify({
+        type: 'user', timestamp: recentTs(), cwd: '/work',
+        message: { content: [{ type: 'tool_use', id: 'tu1', name: 'Read', input: {} }] },
+      }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'ok' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].toolCounts).toEqual({});
+  });
+});
+
 describe('deriveStatus (via readClaudeProjects)', () => {
   beforeEach(() => jest.clearAllMocks());
 
