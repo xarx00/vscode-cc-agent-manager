@@ -546,7 +546,7 @@ export class AgentManagerPanel {
     <!-- ── Main Panel ── -->
     <div id="main-panel">
       <div id="tab-bar">
-        <button class="tab-btn active" data-tab="sessions">Sessions</button>
+        <button class="tab-btn active" data-tab="sessions">Agents</button>
         <button class="tab-btn" data-tab="stats">Stats</button>
       </div>
       <div id="conversation-header">
