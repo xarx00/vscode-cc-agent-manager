@@ -38,6 +38,7 @@ export interface ClaudeProject {
   displayName: string;
   sessions: ClaudeSession[];
   lastActivity?: string;
+  peacockColor?: string;
 }
 
 export interface MessageBlock {

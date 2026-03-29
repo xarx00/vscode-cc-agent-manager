@@ -836,7 +836,14 @@
     container.innerHTML = renderAllSessionsEntry() + projects.map(renderProject).join('');
 
     if (container) bindSidebarEvents(container, false);
+    applyPeacockColors(container);
     applySelectedState();
+  }
+
+  function applyPeacockColors(container) {
+    container.querySelectorAll('[data-peacock]').forEach((el) => {
+      el.style.color = el.dataset.peacock;
+    });
   }
 
   function ensureHashDropdown() {
@@ -1021,7 +1028,7 @@
     <span class="tree-time">${timeAgo(project.lastActivity)}</span>
     <div class="tree-project-actions">
       <button class="btn-pin${isPinned ? ' pinned' : ''}" data-action="pin" data-key="${esc(project.key)}" title="${isPinned ? 'Unpin' : 'Pin'}">&#9733;</button>
-      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open in VS Code">&#8594;</button>
+      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open in VS Code"${project.peacockColor ? ` data-peacock="${esc(project.peacockColor)}"` : ''}>&#8594;</button>
     </div>
   </div>
   <div class="tree-children">

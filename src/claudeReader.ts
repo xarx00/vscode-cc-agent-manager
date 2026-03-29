@@ -284,6 +284,19 @@ function parseSession(
   };
 }
 
+function readPeacockColor(projectPath: string): string | undefined {
+  try {
+    const settingsPath = path.join(projectPath, '.vscode', 'settings.json');
+    if (!fs.existsSync(settingsPath)) return undefined;
+    const content = fs.readFileSync(settingsPath, 'utf-8');
+    const settings = JSON.parse(content);
+    const color = settings['peacock.color'];
+    return typeof color === 'string' ? color : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function readClaudeProjects(): ClaudeProject[] {
   if (!fs.existsSync(PROJECTS_DIR)) return [];
 
@@ -336,6 +349,7 @@ export function readClaudeProjects(): ClaudeProject[] {
     const actualPath = projectCwd ?? decodeDirName(dirName);
     const displayName = path.basename(actualPath);
     const lastActivity = sessions[0]?.lastTimestamp;
+    const peacockColor = readPeacockColor(actualPath);
 
     projects.push({
       key: dirName,
@@ -343,6 +357,7 @@ export function readClaudeProjects(): ClaudeProject[] {
       displayName,
       sessions,
       lastActivity,
+      peacockColor,
     });
   }
 
