@@ -19,3 +19,4 @@ package-lock.json
 HOW_TO_RELEASE.md
 CLAUDE.md
 *.png
+!icon.png
