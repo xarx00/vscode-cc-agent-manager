@@ -85,10 +85,12 @@
   let helpOverlayVisible = false;
 
   // Tab bar state
+  /** @type {'sessions' | 'stats' | 'about'} */
   let activeTab = 'sessions';
   /** @type {string | null} project key selected for stats (null = all) */
   let statsProjectKey = null;
-  let statsTimeRange = 'all'; // 'today' | '7d' | '30d' | 'all'
+  /** @type {'today' | '7d' | '30d' | 'all'} */
+  let statsTimeRange = 'all';
 
   // Sidebar resize state
   let sidebarWidth = 280;
@@ -467,6 +469,7 @@
 
   // ── State persistence ──────────────────────────────────────────────────────
   function saveState() {
+    // statsTimeRange is intentionally not persisted — acceptable tradeoff for simplicity.
     vscode.setState({ activeFilter, filterText, sidebarWidth });
   }
 
@@ -686,13 +689,13 @@
       document.body.style.userSelect = '';
       const mainPanel = document.getElementById('main-panel');
       if (mainPanel) mainPanel.style.pointerEvents = '';
-      vscode.setState({ activeFilter, filterText, sidebarWidth });
+      saveState();
     });
 
     handle.addEventListener('dblclick', () => {
       sidebarWidth = 280;
       sidebar.style.width = '280px';
-      vscode.setState({ activeFilter, filterText, sidebarWidth });
+      saveState();
     });
   })();
 
