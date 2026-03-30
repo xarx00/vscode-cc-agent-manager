@@ -1390,7 +1390,35 @@ button {
 }
 
 .stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 14px 16px 6px;
+}
+
+.stats-time-filters {
+  display: flex;
+  gap: 4px;
+}
+
+.stats-time-btn {
+  background: transparent;
+  border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+  border-radius: 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.stats-time-btn:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.stats-time-btn.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-color: var(--vscode-button-background);
 }
 
 .stats-title {

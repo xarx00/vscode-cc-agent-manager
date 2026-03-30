@@ -57,6 +57,7 @@
   let activeTab = 'sessions';
   /** @type {string | null} project key selected for stats (null = all) */
   let statsProjectKey = null;
+  let statsTimeRange = 'all'; // 'today' | '7d' | '30d' | 'all'
 
   // Sidebar resize state
   let sidebarWidth = 280;
@@ -1628,6 +1629,13 @@
       convContainer.querySelectorAll('.stats-bar-label[data-color]').forEach((el) => {
         el.style.color = el.dataset.color;
       });
+      // Time range filter buttons
+      convContainer.querySelectorAll('.stats-time-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          statsTimeRange = btn.dataset.range;
+          showStats();
+        });
+      });
     }
   }
 
@@ -1657,6 +1665,7 @@
     let totalMessages = 0;
     let totalAgents = 0;
     let totalDurationMs = 0;
+    let maxDurationMs = 0;
     let durCount = 0;
     let totalUserChars = 0;
     let totalAssistantLines = 0;
@@ -1677,7 +1686,7 @@
 
       if (s.firstTimestamp && s.lastTimestamp) {
         const dur = new Date(s.lastTimestamp).getTime() - new Date(s.firstTimestamp).getTime();
-        if (dur > 0) { totalDurationMs += dur; durCount++; }
+        if (dur > 0) { totalDurationMs += dur; if (dur > maxDurationMs) maxDurationMs = dur; durCount++; }
       }
 
       // Merge session tool counts
@@ -1710,9 +1719,11 @@
     }
 
     const avgDurationMin = durCount > 0 ? Math.round(totalDurationMs / durCount / 60000) : 0;
+    const longestSessionMin = Math.round(maxDurationMs / 60000);
     const totalHours = Math.round(totalDurationMs / 3600000 * 10) / 10;
+    const activeDays = Object.keys(sessionsPerDay).length;
 
-    return { sessionCount: sessions.length, totalMessages, totalAgents, avgDurationMin, totalHours, totalUserChars, totalAssistantLines, totalCodeLines, toolCounts, sessionsPerDay, activityByDayHour };
+    return { sessionCount: sessions.length, totalMessages, totalAgents, avgDurationMin, longestSessionMin, totalHours, totalUserChars, totalAssistantLines, totalCodeLines, toolCounts, sessionsPerDay, activityByDayHour, activeDays };
   }
 
   function formatDuration(minutes) {
@@ -1722,12 +1733,30 @@
     return m > 0 ? h + 'h ' + m + 'min' : h + 'h';
   }
 
+  function filterSessionsByTimeRange(sessions, range) {
+    if (range === 'all') return sessions;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let cutoff;
+    if (range === 'today') {
+      cutoff = startOfToday;
+    } else if (range === '7d') {
+      cutoff = new Date(startOfToday);
+      cutoff.setDate(cutoff.getDate() - 6);
+    } else {
+      cutoff = new Date(startOfToday);
+      cutoff.setDate(cutoff.getDate() - 29);
+    }
+    return sessions.filter((s) => s.firstTimestamp && new Date(s.firstTimestamp) >= cutoff);
+  }
+
   function renderStatsView() {
     const project = statsProjectKey ? allProjects.find((p) => p.key === statsProjectKey) : null;
-    const sessions = project ? project.sessions : allProjects.flatMap((p) => p.sessions);
+    const allSessions = project ? project.sessions : allProjects.flatMap((p) => p.sessions);
+    const sessions = filterSessionsByTimeRange(allSessions, statsTimeRange);
     const label = project ? esc(project.displayName) : 'All sessions';
 
-    if (sessions.length === 0) {
+    if (allSessions.length === 0) {
       return `<div class="conv-empty"><p>No session data available for stats.</p></div>`;
     }
 
@@ -1735,7 +1764,14 @@
 
     // Overview cards
     const formatNum = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
-    let html = `<div class="stats-view"><div class="stats-header"><span class="stats-title">${label}</span></div>`;
+    let html = `<div class="stats-view"><div class="stats-header"><span class="stats-title">${label}</span>`;
+    // Time range filter buttons
+    const ranges = [['today', 'Today'], ['7d', '7d'], ['30d', '30d'], ['all', 'All']];
+    html += `<div class="stats-time-filters">`;
+    for (const [val, lbl] of ranges) {
+      html += `<button class="stats-time-btn${statsTimeRange === val ? ' active' : ''}" data-range="${val}">${lbl}</button>`;
+    }
+    html += `</div></div>`;
     html += `<div class="stats-cards">
       <div class="stats-card"><div class="stats-card-value">${stats.sessionCount}</div><div class="stats-card-label">Sessions</div></div>
       <div class="stats-card"><div class="stats-card-value">${stats.totalHours}h</div><div class="stats-card-label">Total Time</div></div>
@@ -1747,6 +1783,17 @@
       <div class="stats-card"><div class="stats-card-value">${formatNum(stats.totalAssistantLines)}</div><div class="stats-card-label">Response Lines</div></div>
       <div class="stats-card"><div class="stats-card-value">${formatNum(stats.totalCodeLines)}</div><div class="stats-card-label">Code Lines</div></div>
       <div class="stats-card"><div class="stats-card-value">${formatDuration(stats.avgDurationMin)}</div><div class="stats-card-label">Avg Duration</div></div>
+    </div>`;
+    // Extra insight cards
+    const avgMsg = stats.sessionCount > 0 ? Math.round(stats.totalMessages / stats.sessionCount) : 0;
+    const mostActiveDay = Object.entries(stats.sessionsPerDay).sort((a, b) => b[1] - a[1])[0];
+    const mostActiveDayLabel = mostActiveDay ? new Date(mostActiveDay[0] + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-';
+    const mostActiveDayCount = mostActiveDay ? mostActiveDay[1] : 0;
+    html += `<div class="stats-cards">
+      <div class="stats-card"><div class="stats-card-value">${formatDuration(stats.longestSessionMin)}</div><div class="stats-card-label">Longest Session</div></div>
+      <div class="stats-card"><div class="stats-card-value">${avgMsg}</div><div class="stats-card-label">Avg Msg / Session</div></div>
+      <div class="stats-card"><div class="stats-card-value">${mostActiveDayCount}</div><div class="stats-card-label">Peak Day (${mostActiveDayLabel})</div></div>
+      <div class="stats-card"><div class="stats-card-value">${stats.activeDays}</div><div class="stats-card-label">Active Days</div></div>
     </div>`;
 
     // Top tools — bar chart + donut
