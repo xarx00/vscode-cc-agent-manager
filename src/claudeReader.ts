@@ -69,24 +69,32 @@ function isCommandMessage(text: string): boolean {
   );
 }
 
+const QUESTION_MARK_RE = /[?？؟]\s*$/;
+
 function deriveStatus(
   lastMessageRole: string | undefined,
-  lastContentBlockType: string | undefined
+  lastContentBlockType: string | undefined,
+  lastContentBlockText: string | undefined
 ): SessionStatus {
   if (!lastMessageRole) return 'idle';
   if (lastMessageRole === 'user') return 'active';
   // lastMessageRole === 'assistant'
   if (lastContentBlockType === 'tool_use') return 'thinking';
-  return 'waiting';
+  // text block ending with a question mark → genuinely waiting for user input
+  if (lastContentBlockType === 'text' && lastContentBlockText && QUESTION_MARK_RE.test(lastContentBlockText)) {
+    return 'waiting';
+  }
+  // text block without question mark → likely mid-stream before next tool_use
+  return 'thinking';
 }
 // Note: 'recent' is not returned here — it is a time-based overlay applied in the
 // webview's statusClass() function and does not come from the parsed message content.
 
-function getLastContentBlockType(msg: { type: string; message?: { content?: unknown } }): string | undefined {
+function getLastContentBlock(msg: { type: string; message?: { content?: unknown } }): { type?: string; text?: string } | undefined {
   if (msg.type !== 'assistant') return undefined;
   const content = msg.message?.content;
   if (Array.isArray(content) && content.length > 0) {
-    return (content[content.length - 1] as { type?: string }).type;
+    return content[content.length - 1] as { type?: string; text?: string };
   }
   return undefined;
 }
@@ -142,6 +150,7 @@ function parseSubAgent(agentFilePath: string): SubAgent | null {
   let messageCount = 0;
   let lastMessageRole: string | undefined;
   let lastContentBlockType: string | undefined;
+  let lastContentBlockText: string | undefined;
   const toolCounts: Record<string, number> = {};
   let userChars = 0;
   let assistantLines = 0;
@@ -164,7 +173,9 @@ function parseSubAgent(agentFilePath: string): SubAgent | null {
     if (msg.type === 'user' || msg.type === 'assistant') {
       messageCount++;
       lastMessageRole = msg.type;
-      lastContentBlockType = getLastContentBlockType(msg);
+      const lastBlock = getLastContentBlock(msg);
+      lastContentBlockType = lastBlock?.type;
+      lastContentBlockText = lastBlock?.text;
     }
 
     if (msg.type === 'user' && !msg.isMeta) {
@@ -185,7 +196,7 @@ function parseSubAgent(agentFilePath: string): SubAgent | null {
   return {
     agentId, slug, firstPrompt, firstTimestamp, lastTimestamp, messageCount,
     lastMessageRole,
-    status: deriveStatus(lastMessageRole, lastContentBlockType),
+    status: deriveStatus(lastMessageRole, lastContentBlockType, lastContentBlockText),
     toolCounts, userChars, assistantLines, codeLines,
   };
 }
@@ -205,6 +216,7 @@ function parseSession(
   let messageCount = 0;
   let lastMessageRole: string | undefined;
   let lastContentBlockType: string | undefined;
+  let lastContentBlockText: string | undefined;
   const toolCounts: Record<string, number> = {};
   let userChars = 0;
   let assistantLines = 0;
@@ -228,7 +240,9 @@ function parseSession(
     if (msg.type === 'user' || msg.type === 'assistant') {
       messageCount++;
       lastMessageRole = msg.type;
-      lastContentBlockType = getLastContentBlockType(msg);
+      const lastBlock = getLastContentBlock(msg);
+      lastContentBlockType = lastBlock?.type;
+      lastContentBlockText = lastBlock?.text;
     }
 
     if (msg.type === 'user' && !msg.isMeta) {
@@ -279,7 +293,7 @@ function parseSession(
     messageCount,
     subAgents,
     lastMessageRole,
-    status: deriveStatus(lastMessageRole, lastContentBlockType),
+    status: deriveStatus(lastMessageRole, lastContentBlockType, lastContentBlockText),
     toolCounts, userChars, assistantLines, codeLines,
   };
 }

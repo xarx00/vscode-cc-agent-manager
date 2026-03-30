@@ -314,10 +314,20 @@ describe('deriveStatus (via readClaudeProjects)', () => {
     expect(projects[0].sessions[0].status).toBe('active');
   });
 
-  test('waiting when last message is assistant with text content', () => {
+  test('thinking when last message is assistant with text not ending in ?', () => {
     const lines = [
       JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
       JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'Done' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].status).toBe('thinking');
+  });
+
+  test('waiting when last message is assistant with text ending in ?', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'Should I continue?' }] } }),
     ].join('\n');
     setupSingleProject(lines);
     const projects = readClaudeProjects();
