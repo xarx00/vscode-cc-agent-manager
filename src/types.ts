@@ -9,6 +9,10 @@ export interface SubAgent {
   messageCount: number;
   lastMessageRole?: string;
   status: SessionStatus;
+  toolCounts: Record<string, number>;
+  userChars: number;
+  assistantLines: number;
+  codeLines: number;
 }
 
 export interface ClaudeSession {
@@ -22,6 +26,10 @@ export interface ClaudeSession {
   subAgents: SubAgent[];
   lastMessageRole?: string;
   status: SessionStatus;
+  toolCounts: Record<string, number>;
+  userChars: number;
+  assistantLines: number;
+  codeLines: number;
 }
 
 export interface ClaudeProject {
@@ -30,6 +38,7 @@ export interface ClaudeProject {
   displayName: string;
   sessions: ClaudeSession[];
   lastActivity?: string;
+  peacockColor?: string;
 }
 
 export interface MessageBlock {

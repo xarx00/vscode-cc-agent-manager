@@ -69,26 +69,73 @@ function isCommandMessage(text: string): boolean {
   );
 }
 
+const QUESTION_MARK_RE = /[?？؟]\s*$/;
+
 function deriveStatus(
   lastMessageRole: string | undefined,
-  lastContentBlockType: string | undefined
+  lastContentBlockType: string | undefined,
+  lastContentBlockText: string | undefined
 ): SessionStatus {
   if (!lastMessageRole) return 'idle';
   if (lastMessageRole === 'user') return 'active';
   // lastMessageRole === 'assistant'
   if (lastContentBlockType === 'tool_use') return 'thinking';
-  return 'waiting';
+  // text block ending with a question mark → genuinely waiting for user input
+  if (lastContentBlockType === 'text' && lastContentBlockText && QUESTION_MARK_RE.test(lastContentBlockText)) {
+    return 'waiting';
+  }
+  // text block without question mark → likely mid-stream before next tool_use
+  return 'thinking';
 }
 // Note: 'recent' is not returned here — it is a time-based overlay applied in the
 // webview's statusClass() function and does not come from the parsed message content.
 
-function getLastContentBlockType(msg: { type: string; message?: { content?: unknown } }): string | undefined {
+function getLastContentBlock(msg: { type: string; message?: { content?: unknown } }): { type?: string; text?: string } | undefined {
   if (msg.type !== 'assistant') return undefined;
   const content = msg.message?.content;
   if (Array.isArray(content) && content.length > 0) {
-    return (content[content.length - 1] as { type?: string }).type;
+    return content[content.length - 1] as { type?: string; text?: string };
   }
   return undefined;
+}
+
+function countLines(text: string | undefined): number {
+  if (!text) return 0;
+  return text.split('\n').length;
+}
+
+function countContentLines(content: string | ContentItem[] | undefined): number {
+  if (typeof content === 'string') return countLines(content);
+  if (!Array.isArray(content)) return 0;
+  let total = 0;
+  for (const item of content) {
+    if (item.type === 'text' && item.text) total += countLines(item.text);
+  }
+  return total;
+}
+
+function countContentChars(content: string | ContentItem[] | undefined): number {
+  if (typeof content === 'string') return content.length;
+  if (!Array.isArray(content)) return 0;
+  let total = 0;
+  for (const item of content) {
+    if (item.type === 'text' && item.text) total += item.text.length;
+  }
+  return total;
+}
+
+function countCodeLines(content: ContentItem[] | undefined): number {
+  if (!Array.isArray(content)) return 0;
+  let total = 0;
+  for (const item of content) {
+    if (item.type === 'tool_use' && item.input) {
+      if (item.name === 'Write' || item.name === 'Edit') {
+        const c = item.input.content ?? item.input.new_string;
+        if (typeof c === 'string') total += countLines(c);
+      }
+    }
+  }
+  return total;
 }
 
 function parseSubAgent(agentFilePath: string): SubAgent | null {
@@ -103,6 +150,11 @@ function parseSubAgent(agentFilePath: string): SubAgent | null {
   let messageCount = 0;
   let lastMessageRole: string | undefined;
   let lastContentBlockType: string | undefined;
+  let lastContentBlockText: string | undefined;
+  const toolCounts: Record<string, number> = {};
+  let userChars = 0;
+  let assistantLines = 0;
+  let codeLines = 0;
 
   for (const msg of messages) {
     if (msg.timestamp) {
@@ -121,14 +173,31 @@ function parseSubAgent(agentFilePath: string): SubAgent | null {
     if (msg.type === 'user' || msg.type === 'assistant') {
       messageCount++;
       lastMessageRole = msg.type;
-      lastContentBlockType = getLastContentBlockType(msg);
+      const lastBlock = getLastContentBlock(msg);
+      lastContentBlockType = lastBlock?.type;
+      lastContentBlockText = lastBlock?.text;
+    }
+
+    if (msg.type === 'user' && !msg.isMeta) {
+      userChars += countContentChars(msg.message?.content);
+    }
+
+    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+      assistantLines += countContentLines(msg.message?.content);
+      codeLines += countCodeLines(msg.message?.content as ContentItem[]);
+      for (const item of msg.message!.content as ContentItem[]) {
+        if (item.type === 'tool_use' && item.name) {
+          toolCounts[item.name] = (toolCounts[item.name] || 0) + 1;
+        }
+      }
     }
   }
 
   return {
     agentId, slug, firstPrompt, firstTimestamp, lastTimestamp, messageCount,
     lastMessageRole,
-    status: deriveStatus(lastMessageRole, lastContentBlockType),
+    status: deriveStatus(lastMessageRole, lastContentBlockType, lastContentBlockText),
+    toolCounts, userChars, assistantLines, codeLines,
   };
 }
 
@@ -147,6 +216,11 @@ function parseSession(
   let messageCount = 0;
   let lastMessageRole: string | undefined;
   let lastContentBlockType: string | undefined;
+  let lastContentBlockText: string | undefined;
+  const toolCounts: Record<string, number> = {};
+  let userChars = 0;
+  let assistantLines = 0;
+  let codeLines = 0;
 
   for (const msg of messages) {
     if (msg.timestamp) {
@@ -166,7 +240,23 @@ function parseSession(
     if (msg.type === 'user' || msg.type === 'assistant') {
       messageCount++;
       lastMessageRole = msg.type;
-      lastContentBlockType = getLastContentBlockType(msg);
+      const lastBlock = getLastContentBlock(msg);
+      lastContentBlockType = lastBlock?.type;
+      lastContentBlockText = lastBlock?.text;
+    }
+
+    if (msg.type === 'user' && !msg.isMeta) {
+      userChars += countContentChars(msg.message?.content);
+    }
+
+    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+      assistantLines += countContentLines(msg.message?.content);
+      codeLines += countCodeLines(msg.message?.content as ContentItem[]);
+      for (const item of msg.message!.content as ContentItem[]) {
+        if (item.type === 'tool_use' && item.name) {
+          toolCounts[item.name] = (toolCounts[item.name] || 0) + 1;
+        }
+      }
     }
   }
 
@@ -203,8 +293,35 @@ function parseSession(
     messageCount,
     subAgents,
     lastMessageRole,
-    status: deriveStatus(lastMessageRole, lastContentBlockType),
+    status: deriveStatus(lastMessageRole, lastContentBlockType, lastContentBlockText),
+    toolCounts, userChars, assistantLines, codeLines,
   };
+}
+
+function stripJsonc(text: string): string {
+  return text
+    .replace(/\/\/[^\n]*/g, '')        // single-line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '')  // block comments
+    .replace(/,(\s*[}\]])/g, '$1');    // trailing commas
+}
+
+const peacockColorCache = new Map<string, string | undefined>();
+
+function readPeacockColor(projectPath: string): string | undefined {
+  if (peacockColorCache.has(projectPath)) return peacockColorCache.get(projectPath);
+  let color: string | undefined;
+  try {
+    const settingsPath = path.join(projectPath, '.vscode', 'settings.json');
+    if (!fs.existsSync(settingsPath)) return undefined;
+    const content = fs.readFileSync(settingsPath, 'utf-8');
+    const settings = JSON.parse(stripJsonc(content));
+    const raw = settings['peacock.color'];
+    color = typeof raw === 'string' ? raw : undefined;
+  } catch {
+    color = undefined;
+  }
+  peacockColorCache.set(projectPath, color);
+  return color;
 }
 
 export function readClaudeProjects(): ClaudeProject[] {
@@ -259,6 +376,7 @@ export function readClaudeProjects(): ClaudeProject[] {
     const actualPath = projectCwd ?? decodeDirName(dirName);
     const displayName = path.basename(actualPath);
     const lastActivity = sessions[0]?.lastTimestamp;
+    const peacockColor = readPeacockColor(actualPath);
 
     projects.push({
       key: dirName,
@@ -266,6 +384,7 @@ export function readClaudeProjects(): ClaudeProject[] {
       displayName,
       sessions,
       lastActivity,
+      peacockColor,
     });
   }
 

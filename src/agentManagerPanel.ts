@@ -449,7 +449,6 @@ export class AgentManagerPanel {
 </head>
 <body>
   <div id="app">
-    <div id="icon-rail" class="icon-rail"></div>
     <!-- ── Left Sidebar ── -->
     <div id="sidebar">
       <div class="sidebar-header">
@@ -528,9 +527,8 @@ export class AgentManagerPanel {
       </div>
 
       <div class="filter-bar" id="filter-bar">
-        <button class="filter-chip selected" data-filter="all">All</button>
-        <button class="filter-chip" data-filter="active">Active</button>
-        <button class="filter-chip" data-filter="waiting">Waiting</button>
+        <button class="filter-chip" data-filter="active"><span class="status-dot tiny active"></span>Active</button>
+        <button class="filter-chip" data-filter="waiting"><span class="status-dot tiny waiting"></span>Waiting</button>
         <button class="filter-chip" data-filter="pinned">Pinned</button>
       </div>
 
@@ -542,8 +540,15 @@ export class AgentManagerPanel {
       </div>
     </div>
 
-    <!-- ── Main Conversation Panel ── -->
+    <div id="sidebar-resize-handle"></div>
+
+    <!-- ── Main Panel ── -->
     <div id="main-panel">
+      <div id="tab-bar">
+        <button class="tab-btn active" data-tab="sessions">Agents</button>
+        <button class="tab-btn" data-tab="stats">Stats</button>
+        <button class="tab-btn" data-tab="about">About</button>
+      </div>
       <div id="conversation-header">
         <span id="conv-breadcrumb">Select a session to view its conversation</span>
         <span id="live-indicator" class="live-indicator">

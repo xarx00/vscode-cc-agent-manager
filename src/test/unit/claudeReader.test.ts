@@ -231,6 +231,141 @@ describe('readClaudeProjects', () => {
   });
 });
 
+describe('toolCounts (via readClaudeProjects)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const recentTs = () => new Date().toISOString();
+
+  function setupSingleProject(jsonlContent: string): void {
+    jest.mocked(fs.existsSync).mockImplementation((p) => p === PROJECTS);
+    jest.mocked(fs.readdirSync)
+      .mockReturnValueOnce(['proj1'] as any)
+      .mockReturnValueOnce(['session.jsonl'] as any);
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
+    jest.mocked(fs.readFileSync).mockReturnValue(jsonlContent);
+  }
+
+  test('counts tool_use items in assistant messages', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({
+        type: 'assistant', timestamp: recentTs(),
+        message: { content: [
+          { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: '/foo.ts' } },
+          { type: 'tool_use', id: 'tu2', name: 'Bash', input: { command: 'ls' } },
+        ] },
+      }),
+      JSON.stringify({
+        type: 'assistant', timestamp: recentTs(),
+        message: { content: [
+          { type: 'tool_use', id: 'tu3', name: 'Read', input: { file_path: '/bar.ts' } },
+          { type: 'text', text: 'Done' },
+        ] },
+      }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].toolCounts).toEqual({ Read: 2, Bash: 1 });
+  });
+
+  test('returns empty toolCounts when no tool_use items exist', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'Hi' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].toolCounts).toEqual({});
+  });
+
+  test('ignores tool_use in user messages', () => {
+    const lines = [
+      JSON.stringify({
+        type: 'user', timestamp: recentTs(), cwd: '/work',
+        message: { content: [{ type: 'tool_use', id: 'tu1', name: 'Read', input: {} }] },
+      }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'ok' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].toolCounts).toEqual({});
+  });
+});
+
+describe('userChars, assistantLines, codeLines (via readClaudeProjects)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const recentTs = () => new Date().toISOString();
+
+  function setupSingleProject(jsonlContent: string): void {
+    jest.mocked(fs.existsSync).mockImplementation((p) => p === PROJECTS);
+    jest.mocked(fs.readdirSync)
+      .mockReturnValueOnce(['proj1'] as any)
+      .mockReturnValueOnce(['session.jsonl'] as any);
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
+    jest.mocked(fs.readFileSync).mockReturnValue(jsonlContent);
+  }
+
+  test('counts userChars from non-meta user messages', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', isMeta: true, timestamp: recentTs(), cwd: '/work', message: { content: 'meta content' } }),
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello' } }),
+      JSON.stringify({ type: 'user', timestamp: recentTs(), message: { content: [{ type: 'text', text: ' world' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].userChars).toBe(11); // 'hello'.length + ' world'.length; isMeta excluded
+  });
+
+  test('counts assistantLines from text blocks across messages', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'line1\nline2\nline3' }] } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'one' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].assistantLines).toBe(4); // 3 + 1
+  });
+
+  test('empty assistant text block contributes 0 lines', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: '' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].assistantLines).toBe(0);
+  });
+
+  test('counts codeLines from Write and Edit tool_use blocks only', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({
+        type: 'assistant', timestamp: recentTs(),
+        message: { content: [
+          { type: 'tool_use', id: 'tu1', name: 'Write', input: { file_path: '/foo.ts', content: 'a\nb\nc' } },
+          { type: 'tool_use', id: 'tu2', name: 'Edit', input: { file_path: '/foo.ts', new_string: 'x\ny' } },
+          { type: 'tool_use', id: 'tu3', name: 'Bash', input: { command: 'echo hi\necho there' } },
+        ] },
+      }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].codeLines).toBe(5); // Write: 3, Edit: 2, Bash: ignored
+  });
+
+  test('assistantLines and codeLines default to 0 with no assistant messages', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].assistantLines).toBe(0);
+    expect(projects[0].sessions[0].codeLines).toBe(0);
+  });
+});
+
 describe('deriveStatus (via readClaudeProjects)', () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -253,10 +388,20 @@ describe('deriveStatus (via readClaudeProjects)', () => {
     expect(projects[0].sessions[0].status).toBe('active');
   });
 
-  test('waiting when last message is assistant with text content', () => {
+  test('thinking when last message is assistant with text not ending in ?', () => {
     const lines = [
       JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
       JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'Done' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].status).toBe('thinking');
+  });
+
+  test('waiting when last message is assistant with text ending in ?', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'Should I continue?' }] } }),
     ].join('\n');
     setupSingleProject(lines);
     const projects = readClaudeProjects();
@@ -271,5 +416,79 @@ describe('deriveStatus (via readClaudeProjects)', () => {
     setupSingleProject(lines);
     const projects = readClaudeProjects();
     expect(projects[0].sessions[0].status).toBe('thinking');
+  });
+
+  test('waiting when last assistant message ends with fullwidth question mark ？', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: 'Should I continue\uff1f' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].status).toBe('waiting');
+  });
+
+  test('waiting when last assistant message ends with Arabic question mark \u061f', () => {
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: recentTs(), cwd: '/work', message: { content: 'hello world' } }),
+      JSON.stringify({ type: 'assistant', timestamp: recentTs(), message: { content: [{ type: 'text', text: '\u0647\u0644 \u064a\u062c\u0628\u061f' }] } }),
+    ].join('\n');
+    setupSingleProject(lines);
+    const projects = readClaudeProjects();
+    expect(projects[0].sessions[0].status).toBe('waiting');
+  });
+});
+
+describe('readPeacockColor (via readClaudeProjects)', () => {
+  // Each test uses a unique project path to avoid hitting the module-level cache
+  // from a previous test run.
+  beforeEach(() => jest.clearAllMocks());
+
+  function setupProject(cwd: string, settingsContent: string | null, jsonlContent: string): void {
+    const settingsPath = `${cwd}/.vscode/settings.json`;
+    jest.mocked(fs.existsSync).mockImplementation((p) =>
+      p === PROJECTS || (settingsContent !== null && p === settingsPath)
+    );
+    jest.mocked(fs.readdirSync)
+      .mockReturnValueOnce(['proj1'] as any)
+      .mockReturnValueOnce(['session.jsonl'] as any);
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
+    jest.mocked(fs.readFileSync).mockImplementation((p) => {
+      if (settingsContent !== null && String(p) === settingsPath) return settingsContent;
+      return jsonlContent;
+    });
+  }
+
+  test('reads peacock color from plain JSON settings', () => {
+    const ts = new Date().toISOString();
+    setupProject(
+      '/peacock-work-1',
+      JSON.stringify({ 'peacock.color': '#aabbcc' }),
+      JSON.stringify({ type: 'user', timestamp: ts, cwd: '/peacock-work-1', message: { content: 'hello world' } })
+    );
+    const projects = readClaudeProjects();
+    expect(projects[0].peacockColor).toBe('#aabbcc');
+  });
+
+  test('reads peacock color from JSONC settings with line comments and trailing commas', () => {
+    const ts = new Date().toISOString();
+    setupProject(
+      '/peacock-work-2',
+      '// workspace settings\n{ "peacock.color": "#ff0000", }',
+      JSON.stringify({ type: 'user', timestamp: ts, cwd: '/peacock-work-2', message: { content: 'hello world' } })
+    );
+    const projects = readClaudeProjects();
+    expect(projects[0].peacockColor).toBe('#ff0000');
+  });
+
+  test('reads peacock color from JSONC settings with block comments', () => {
+    const ts = new Date().toISOString();
+    setupProject(
+      '/peacock-work-3',
+      '{ /* color */ "peacock.color": "#123456" }',
+      JSON.stringify({ type: 'user', timestamp: ts, cwd: '/peacock-work-3', message: { content: 'hello world' } })
+    );
+    const projects = readClaudeProjects();
+    expect(projects[0].peacockColor).toBe('#123456');
   });
 });

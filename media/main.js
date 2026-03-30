@@ -3,6 +3,37 @@
 (function () {
   const vscode = acquireVsCodeApi();
 
+  // Fixed colors per tool (consistent across renders)
+  const TOOL_COLORS = {
+    Bash:       '#007acc',
+    Read:       '#4ec9b0',
+    Edit:       '#e8a030',
+    Write:      '#cc6633',
+    Grep:       '#9b59b6',
+    Glob:       '#2ecc71',
+    WebSearch:  '#e74c3c',
+    WebFetch:   '#3498db',
+    Agent:      '#f39c12',
+    TodoWrite:  '#1abc9c',
+    ToolSearch: '#e67e22',
+    Skill:      '#8e44ad',
+  };
+  const TOOL_COLOR_DEFAULT = '#7f8c8d';
+
+  // Minimal 16x16 stroke-based SVG icons for tools (displayed on donut chart)
+  const TOOL_ICONS = {
+    Bash:       '<path d="M4 4l4 4-4 4" stroke-width="2"/><line x1="9" y1="12" x2="13" y2="12" stroke-width="2"/>',
+    Read:       '<circle cx="8" cy="8" r="2" fill="white"/><path d="M1 8c2-4 5-6 7-6s5 2 7 6c-2 4-5 6-7 6s-5-2-7-6z" stroke-width="1.5"/>',
+    Edit:       '<path d="M2 14l1-4L11 2l3 3-8 8z" fill="none" stroke-width="1.5"/>',
+    Write:      '<path d="M4 2v12h8V6l-4-4H4z" fill="none" stroke-width="1.5"/>',
+    Grep:       '<circle cx="7" cy="7" r="4" fill="none" stroke-width="2"/><line x1="10" y1="10" x2="14" y2="14" stroke-width="2"/>',
+    Glob:       '<path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" fill="none" stroke-width="1.2"/>',
+    WebSearch:  '<circle cx="8" cy="8" r="6" fill="none" stroke-width="1.5"/><line x1="2" y1="8" x2="14" y2="8" stroke-width="1"/><path d="M8 2c-2.5 3-2.5 9 0 12M8 2c2.5 3 2.5 9 0 12" fill="none" stroke-width="1"/>',
+    WebFetch:   '<path d="M3 3h10v10H3z" fill="none" stroke-width="1.5"/><line x1="3" y1="7" x2="13" y2="7" stroke-width="1.5"/>',
+    Agent:      '<circle cx="8" cy="5" r="3" fill="none" stroke-width="1.5"/><path d="M3 15c0-3 2.5-5 5-5s5 2 5 5" fill="none" stroke-width="1.5"/>',
+    TodoWrite:  '<path d="M3 4l2 2 4-4" fill="none" stroke-width="2"/><line x1="3" y1="12" x2="13" y2="12" stroke-width="1.5"/>',
+  };
+
   let allProjects = [];
   let filterText = '';
   let activeFilter = 'all';
@@ -53,6 +84,17 @@
   let lastGPress = 0;
   let helpOverlayVisible = false;
 
+  // Tab bar state
+  /** @type {'sessions' | 'stats' | 'about'} */
+  let activeTab = 'sessions';
+  /** @type {string | null} project key selected for stats (null = all) */
+  let statsProjectKey = null;
+  /** @type {'today' | '7d' | '30d' | 'all'} */
+  let statsTimeRange = 'all';
+
+  // Sidebar resize state
+  let sidebarWidth = 280;
+
   // Scroll tracking for conversation container
   const convContainerEl = document.getElementById('conversation-container');
   if (convContainerEl) {
@@ -86,7 +128,12 @@
   if (saved) {
     activeFilter = saved.activeFilter || 'all';
     filterText = saved.filterText || '';
+    if (saved.sidebarWidth) sidebarWidth = saved.sidebarWidth;
   }
+
+  // Apply persisted sidebar width
+  const sidebarEl = document.getElementById('sidebar');
+  if (sidebarEl) sidebarEl.style.width = sidebarWidth + 'px';
 
   // ── Message from extension ──────────────────────────────────────────────────
   window.addEventListener('message', (event) => {
@@ -102,6 +149,8 @@
       }
       renderSidebar(filtered());
       checkWaitingAndNotify();
+      // Refresh stats view if it's currently displayed
+      if (activeTab === 'stats') showStats();
       document.getElementById('last-updated').textContent =
         new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
@@ -110,14 +159,18 @@
       hasLiveTerminal = false;
       const focusBtn = document.getElementById('focus-btn');
       if (focusBtn) focusBtn.style.display = 'none';
-      renderConversation(msg.messages, msg.sessionId, msg.agentId);
+      if (activeTab === 'sessions') {
+        renderConversation(msg.messages, msg.sessionId, msg.agentId);
+      }
     }
     if (msg.command === 'exportDone') {
       exportInProgress = false;
       exportBtn.disabled = false;
     }
     if (msg.command === 'conversationTail') {
-      handleConversationTail(msg.messages, msg.sessionId, msg.agentId);
+      if (activeTab === 'sessions') {
+        handleConversationTail(msg.messages, msg.sessionId, msg.agentId);
+      }
     }
     if (msg.command === 'sidebarRowUpdate') {
       handleSidebarRowUpdate(msg);
@@ -188,7 +241,12 @@
   filterBar.addEventListener('click', (e) => {
     const chip = e.target.closest('.filter-chip');
     if (!chip) return;
-    activeFilter = chip.dataset.filter;
+    // Toggle: clicking the active filter deselects it (back to all)
+    if (chip.classList.contains('selected')) {
+      activeFilter = 'all';
+    } else {
+      activeFilter = chip.dataset.filter;
+    }
     filterBar.querySelectorAll('.filter-chip').forEach((c) => {
       c.classList.toggle('selected', c.dataset.filter === activeFilter);
     });
@@ -411,7 +469,8 @@
 
   // ── State persistence ──────────────────────────────────────────────────────
   function saveState() {
-    vscode.setState({ activeFilter, filterText });
+    // statsTimeRange is intentionally not persisted — acceptable tradeoff for simplicity.
+    vscode.setState({ activeFilter, filterText, sidebarWidth });
   }
 
   // ── Sound system ───────────────────────────────────────────────────────────
@@ -471,13 +530,11 @@
   }
 
   function checkWaitingAndNotify() {
+    // Only track sessions for sound notifications, not subagents
     const waitingIds = new Set();
     for (const p of allProjects) {
       for (const s of p.sessions) {
         if (isItemWaiting(s)) waitingIds.add(s.sessionId);
-        for (const a of s.subAgents) {
-          if (isItemWaiting(a)) waitingIds.add(a.agentId);
-        }
       }
     }
     const hasNew = [...waitingIds].some((id) => !previousWaitingIds.has(id));
@@ -495,7 +552,7 @@
     }
     if (previousWaitingIds.size > 0 && settings.soundEnabled && settings.soundRepeatSec > 0) {
       soundRepeatTimer = setInterval(() => {
-        const stillWaiting = allProjects.some((p) => isProjectWaiting(p));
+        const stillWaiting = allProjects.some((p) => p.sessions.some((s) => isItemWaiting(s)));
         if (stillWaiting) {
           playNotificationSound();
         } else {
@@ -586,33 +643,61 @@
 
   // ── Responsive layout ──────────────────────────────────────────────────────
   function applyLayoutMode() {
-    const iconRail = document.getElementById('icon-rail');
     const app = document.getElementById('app');
-    if (!app || !iconRail) return;
+    const handle = document.getElementById('sidebar-resize-handle');
+    if (!app) return;
 
     if (layoutMode === 'narrow') {
       app.classList.add('narrow-mode');
-      iconRail.style.display = 'flex';
-      renderIconRail();
+      if (handle) handle.style.display = 'none';
     } else {
       app.classList.remove('narrow-mode');
-      iconRail.style.display = 'none';
+      if (handle) handle.style.display = '';
       closeSidebarOverlay();
     }
   }
 
-  function renderIconRail() {
-    const rail = document.getElementById('icon-rail');
-    if (!rail) return;
-    const projects = filtered();
-    rail.innerHTML = projects.map((p) => {
-      const status = projectStatusClass(p);
-      return `<div class="icon-rail-dot ${status}" data-key="${esc(p.key)}" title="${esc(p.displayName)} (${p.sessions.length} sessions)"></div>`;
-    }).join('');
-    rail.querySelectorAll('.icon-rail-dot').forEach((dot) => {
-      dot.addEventListener('click', () => { openSidebarOverlay(); });
+  // ── Sidebar resize ────────────────────────────────────────────────────────
+  (function initSidebarResize() {
+    const handle = document.getElementById('sidebar-resize-handle');
+    const sidebar = document.getElementById('sidebar');
+    if (!handle || !sidebar) return;
+
+    let dragging = false;
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging = true;
+      handle.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      const mainPanel = document.getElementById('main-panel');
+      if (mainPanel) mainPanel.style.pointerEvents = 'none';
     });
-  }
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const appRect = document.getElementById('app').getBoundingClientRect();
+      const newWidth = Math.min(500, Math.max(180, e.clientX - appRect.left));
+      sidebarWidth = newWidth;
+      sidebar.style.width = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      const mainPanel = document.getElementById('main-panel');
+      if (mainPanel) mainPanel.style.pointerEvents = '';
+      saveState();
+    });
+
+    handle.addEventListener('dblclick', () => {
+      sidebarWidth = 280;
+      sidebar.style.width = '280px';
+      saveState();
+    });
+  })();
 
   function openSidebarOverlay() {
     closeSidebarOverlay();
@@ -674,6 +759,14 @@
       elTyped.addEventListener('click', (e) => {
         e.stopPropagation();
         const action = elTyped.dataset.action;
+        if (action === 'select-all') {
+          statsProjectKey = null;
+          if (activeTab === 'stats') {
+            showStats();
+          }
+          applySelectedState();
+          return;
+        }
         if (action === 'open') vscode.postMessage({ command: 'openFolder', path: elTyped.dataset.path });
         if (action === 'pin') vscode.postMessage({ command: 'togglePin', key: elTyped.dataset.key });
         if (action === 'load-more') {
@@ -697,8 +790,16 @@
       hdr.addEventListener('click', (e) => {
         if (/** @type {HTMLElement} */ (e.target).closest('[data-action]')) return;
         const proj = hdr.closest('.tree-project');
-        proj.classList.toggle('collapsed');
         const key = proj.dataset.key;
+
+        // In stats mode, clicking a project header shows its stats
+        if (activeTab === 'stats' && key) {
+          statsProjectKey = key;
+          showStats();
+          applySelectedState();
+        }
+
+        proj.classList.toggle('collapsed');
         if (key) {
           if (proj.classList.contains('collapsed')) expandedProjectKeys.delete(key);
           else expandedProjectKeys.add(key);
@@ -767,12 +868,17 @@
       return;
     }
 
-    container.innerHTML = projects.map(renderProject).join('');
+    container.innerHTML = renderAllSessionsEntry() + projects.map(renderProject).join('');
 
     if (container) bindSidebarEvents(container, false);
+    applyPeacockColors(container);
     applySelectedState();
+  }
 
-    if (layoutMode === 'narrow' && typeof renderIconRail === 'function') renderIconRail();
+  function applyPeacockColors(container) {
+    container.querySelectorAll('[data-peacock]').forEach((el) => {
+      el.style.color = el.dataset.peacock;
+    });
   }
 
   function ensureHashDropdown() {
@@ -831,6 +937,15 @@
     selectedAgentId = agentId;
     selectedProjectKey = projectKey;
     renderedMessageCount = 0;
+
+    // Always switch to Sessions tab when selecting a conversation
+    if (activeTab !== 'sessions') {
+      activeTab = 'sessions';
+      const tabBar = document.getElementById('tab-bar');
+      if (tabBar) tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === 'sessions'));
+      hideStats();
+    }
+
     deactivateLiveIndicator();
     exportBtn.style.display = 'block';
     exportBtn.disabled = exportInProgress;
@@ -878,6 +993,20 @@
   }
 
   function applySelectedState() {
+    // Clear all selected states
+    document.querySelectorAll('.tree-session.selected, .tree-subagent.selected, .tree-project-header.selected, .tree-all-sessions.selected').forEach((el) => el.classList.remove('selected'));
+
+    if (activeTab === 'stats') {
+      if (statsProjectKey === null) {
+        const allEl = document.querySelector('.tree-all-sessions');
+        if (allEl) allEl.classList.add('selected');
+      } else {
+        const projEl = document.querySelector(`.tree-project[data-key="${CSS.escape(statsProjectKey)}"] .tree-project-header`);
+        if (projEl) projEl.classList.add('selected');
+      }
+      return;
+    }
+
     if (!selectedSessionId) return;
     const selector = selectedAgentId
       ? `.tree-subagent[data-agent-id="${CSS.escape(selectedAgentId)}"]`
@@ -934,7 +1063,7 @@
     <span class="tree-time">${timeAgo(project.lastActivity)}</span>
     <div class="tree-project-actions">
       <button class="btn-pin${isPinned ? ' pinned' : ''}" data-action="pin" data-key="${esc(project.key)}" title="${isPinned ? 'Unpin' : 'Pin'}">&#9733;</button>
-      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open project">&#8594;</button>
+      <button class="btn-action" data-action="open" data-path="${esc(project.path)}" title="Open in VS Code"${project.peacockColor ? ` data-peacock="${esc(project.peacockColor)}"` : ''}><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1h6v1H2v12h12V8.5h1v6.5H1V1h.5zM9 1h6v6h-1V2.7L7.4 9.3l-.7-.7L13.3 2H9V1z"/></svg></button>
     </div>
   </div>
   <div class="tree-children">
@@ -1397,6 +1526,23 @@
         e.preventDefault(); searchInput.focus(); searchInput.select(); sidebarHasFocus = false; break;
       case '?':
         e.preventDefault(); showHelpOverlay(); break;
+      case '1':
+      case '2':
+      case '3': {
+        const tabs = ['sessions', 'stats', 'about'];
+        const idx = Number(e.key) - 1;
+        const tab = tabs[idx];
+        if (tab && tab !== activeTab) {
+          activeTab = tab;
+          const tabBar = document.getElementById('tab-bar');
+          if (tabBar) tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+          if (tab === 'stats') showStats();
+          else if (tab === 'about') showAbout();
+          else hideStats();
+        }
+        e.preventDefault();
+        break;
+      }
       case 'Tab': {
         e.preventDefault();
         sidebarHasFocus = !sidebarHasFocus;
@@ -1432,6 +1578,9 @@
         <div class="help-key">/</div><div class="help-desc">Focus search</div>
         <div class="help-key">?</div><div class="help-desc">This help</div>
         <div class="help-key">Tab</div><div class="help-desc">Switch sidebar / conversation</div>
+        <div class="help-key">1</div><div class="help-desc">Agents tab</div>
+        <div class="help-key">2</div><div class="help-desc">Stats tab</div>
+        <div class="help-key">3</div><div class="help-desc">About tab</div>
       </div>
       <div class="help-dismiss">Press Escape to close</div>
     </div>`;
@@ -1470,6 +1619,474 @@
       const msgsEl = row.querySelector('.tree-msgs');
       if (msgsEl && msg.messageCount) msgsEl.textContent = `${msg.messageCount} msgs`;
     }
+  }
+
+  // ── Tab bar ────────────────────────────────────────────────────────────────
+  (function initTabBar() {
+    const tabBar = document.getElementById('tab-bar');
+    if (!tabBar) return;
+    tabBar.addEventListener('click', (e) => {
+      const btn = /** @type {HTMLElement} */ (e.target).closest('.tab-btn');
+      if (!btn) return;
+      const tab = btn.dataset.tab;
+      if (tab === activeTab) return;
+      activeTab = tab;
+      tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+      if (tab === 'stats') {
+        showStats();
+      } else if (tab === 'about') {
+        showAbout();
+      } else {
+        hideStats();
+      }
+    });
+  })();
+
+  function showStats() {
+    const convContainer = document.getElementById('conversation-container');
+    const convHeader = document.getElementById('conversation-header');
+    const sendBar = document.getElementById('send-bar');
+    if (convHeader) convHeader.style.display = 'none';
+    if (sendBar) sendBar.style.display = 'none';
+    if (convContainer) {
+      convContainer.innerHTML = renderStatsView();
+      convContainer.style.display = '';
+      // Apply bar widths via JS (CSP blocks inline styles in innerHTML)
+      convContainer.querySelectorAll('.stats-bar-fill').forEach((el) => {
+        el.style.width = el.dataset.pct + '%';
+      });
+      // Apply donut gradient
+      convContainer.querySelectorAll('.stats-donut').forEach((el) => {
+        el.style.background = 'conic-gradient(' + el.dataset.gradient + ')';
+      });
+      // Position donut icons
+      convContainer.querySelectorAll('.stats-donut-icon').forEach((el) => {
+        el.style.left = (parseFloat(el.dataset.x) - 9) + 'px'; // 9 = half icon width
+        el.style.top = (parseFloat(el.dataset.y) - 9) + 'px';
+      });
+      // Apply bar label colors (serve as donut legend)
+      convContainer.querySelectorAll('.stats-bar-label[data-color]').forEach((el) => {
+        el.style.color = el.dataset.color;
+      });
+      // Time range filter buttons
+      convContainer.querySelectorAll('.stats-time-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          statsTimeRange = btn.dataset.range;
+          showStats();
+        });
+      });
+    }
+  }
+
+  function hideStats() {
+    const convHeader = document.getElementById('conversation-header');
+    const sendBar = document.getElementById('send-bar');
+    if (convHeader) convHeader.style.display = '';
+    if (sendBar) sendBar.style.display = '';
+    // If a session was previously selected, reload it; otherwise show placeholder
+    if (selectedSessionId && selectedProjectKey) {
+      vscode.postMessage({ command: 'loadConversation', projectKey: selectedProjectKey, sessionId: selectedSessionId, agentId: selectedAgentId });
+    } else {
+      const convContainer = document.getElementById('conversation-container');
+      if (convContainer) {
+        convContainer.innerHTML = `<div class="conv-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="conv-empty-icon">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <p>Click on a session or agent in the sidebar to view the conversation.</p>
+        </div>`;
+      }
+    }
+  }
+
+  // ── Stats computation & rendering ─────────────────────────────────────────
+  function computeStats(sessions) {
+    let totalMessages = 0;
+    let totalAgents = 0;
+    let totalDurationMs = 0;
+    let maxDurationMs = 0;
+    let durCount = 0;
+    let totalUserChars = 0;
+    let totalAssistantLines = 0;
+    let totalCodeLines = 0;
+    /** @type {Record<string, number>} */
+    const toolCounts = {};
+    /** @type {Record<string, number>} */
+    const sessionsPerDay = {};
+    /** @type {Record<string, number>} "YYYY-MM-DD|HH" → count */
+    const activityByDayHour = {};
+
+    for (const s of sessions) {
+      totalMessages += s.messageCount || 0;
+      totalAgents += (s.subAgents || []).length;
+      totalUserChars += s.userChars || 0;
+      totalAssistantLines += s.assistantLines || 0;
+      totalCodeLines += s.codeLines || 0;
+
+      if (s.firstTimestamp && s.lastTimestamp) {
+        const dur = new Date(s.lastTimestamp).getTime() - new Date(s.firstTimestamp).getTime();
+        if (dur > 0) { totalDurationMs += dur; if (dur > maxDurationMs) maxDurationMs = dur; durCount++; }
+      }
+
+      // Merge session tool counts
+      if (s.toolCounts) {
+        for (const [tool, count] of Object.entries(s.toolCounts)) {
+          toolCounts[tool] = (toolCounts[tool] || 0) + /** @type {number} */ (count);
+        }
+      }
+
+      // Merge subagent stats
+      for (const a of (s.subAgents || [])) {
+        totalUserChars += a.userChars || 0;
+        totalAssistantLines += a.assistantLines || 0;
+        totalCodeLines += a.codeLines || 0;
+        if (a.toolCounts) {
+          for (const [tool, count] of Object.entries(a.toolCounts)) {
+            toolCounts[tool] = (toolCounts[tool] || 0) + /** @type {number} */ (count);
+          }
+        }
+      }
+
+      // Sessions per day + hourly activity
+      if (s.firstTimestamp) {
+        const dt = new Date(s.firstTimestamp);
+        const day = s.firstTimestamp.slice(0, 10);
+        sessionsPerDay[day] = (sessionsPerDay[day] || 0) + 1;
+        const hourKey = day + '|' + dt.getHours();
+        activityByDayHour[hourKey] = (activityByDayHour[hourKey] || 0) + 1;
+      }
+    }
+
+    const avgDurationMin = durCount > 0 ? Math.round(totalDurationMs / durCount / 60000) : 0;
+    const longestSessionMin = Math.round(maxDurationMs / 60000);
+    const totalHours = Math.round(totalDurationMs / 3600000 * 10) / 10;
+    const activeDays = Object.keys(sessionsPerDay).length;
+
+    return { sessionCount: sessions.length, totalMessages, totalAgents, avgDurationMin, longestSessionMin, totalHours, totalUserChars, totalAssistantLines, totalCodeLines, toolCounts, sessionsPerDay, activityByDayHour, activeDays };
+  }
+
+  function formatDuration(minutes) {
+    if (minutes < 60) return minutes + 'min';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? h + 'h ' + m + 'min' : h + 'h';
+  }
+
+  function filterSessionsByTimeRange(sessions, range) {
+    if (range === 'all') return sessions;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let cutoff;
+    if (range === 'today') {
+      cutoff = startOfToday;
+    } else if (range === '7d') {
+      cutoff = new Date(startOfToday);
+      cutoff.setDate(cutoff.getDate() - 6);
+    } else {
+      cutoff = new Date(startOfToday);
+      cutoff.setDate(cutoff.getDate() - 29);
+    }
+    return sessions.filter((s) => s.firstTimestamp && new Date(s.firstTimestamp) >= cutoff);
+  }
+
+  function renderStatsView() {
+    const project = statsProjectKey ? allProjects.find((p) => p.key === statsProjectKey) : null;
+    const allSessions = project ? project.sessions : allProjects.flatMap((p) => p.sessions);
+    const sessions = filterSessionsByTimeRange(allSessions, statsTimeRange);
+    const label = project ? esc(project.displayName) : 'All sessions';
+
+    if (allSessions.length === 0) {
+      return `<div class="conv-empty"><p>No session data available for stats.</p></div>`;
+    }
+
+    const stats = computeStats(sessions);
+    const allStats = statsTimeRange === 'all' ? stats : computeStats(allSessions);
+
+    // Overview cards
+    const formatNum = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+    let html = `<div class="stats-view"><div class="stats-header"><span class="stats-title">${label}</span>`;
+    // Time range filter buttons
+    const ranges = [['today', 'Today'], ['7d', '7d'], ['30d', '30d'], ['all', 'All']];
+    html += `<div class="stats-time-filters">`;
+    for (const [val, lbl] of ranges) {
+      html += `<button class="stats-time-btn${statsTimeRange === val ? ' active' : ''}" data-range="${val}">${lbl}</button>`;
+    }
+    html += `</div></div>`;
+    html += `<div class="stats-cards">
+      <div class="stats-card"><div class="stats-card-value">${stats.sessionCount}</div><div class="stats-card-label">Sessions</div></div>
+      <div class="stats-card"><div class="stats-card-value">${stats.totalHours}h</div><div class="stats-card-label">Total Time</div></div>
+      <div class="stats-card"><div class="stats-card-value">${formatNum(stats.totalMessages)}</div><div class="stats-card-label">Messages</div></div>
+      <div class="stats-card"><div class="stats-card-value">${stats.totalAgents}</div><div class="stats-card-label">Agents</div></div>
+    </div>`;
+    html += `<div class="stats-cards">
+      <div class="stats-card"><div class="stats-card-value">${formatNum(stats.totalUserChars)}</div><div class="stats-card-label">Prompt Chars</div></div>
+      <div class="stats-card"><div class="stats-card-value">${formatNum(stats.totalAssistantLines)}</div><div class="stats-card-label">Response Lines</div></div>
+      <div class="stats-card"><div class="stats-card-value">${formatNum(stats.totalCodeLines)}</div><div class="stats-card-label">Code Lines</div></div>
+      <div class="stats-card"><div class="stats-card-value">${formatDuration(stats.avgDurationMin)}</div><div class="stats-card-label">Avg Duration</div></div>
+    </div>`;
+    // Extra insight cards
+    const avgMsg = stats.sessionCount > 0 ? Math.round(stats.totalMessages / stats.sessionCount) : 0;
+    const mostActiveDay = Object.entries(stats.sessionsPerDay).sort((a, b) => b[1] - a[1])[0];
+    const mostActiveDayLabel = mostActiveDay ? new Date(mostActiveDay[0] + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-';
+    const mostActiveDayCount = mostActiveDay ? mostActiveDay[1] : 0;
+    html += `<div class="stats-cards">
+      <div class="stats-card"><div class="stats-card-value">${formatDuration(stats.longestSessionMin)}</div><div class="stats-card-label">Longest Session</div></div>
+      <div class="stats-card"><div class="stats-card-value">${avgMsg}</div><div class="stats-card-label">Avg Msg / Session</div></div>
+      <div class="stats-card"><div class="stats-card-value">${mostActiveDayCount}</div><div class="stats-card-label">Peak Day (${mostActiveDayLabel})</div></div>
+      <div class="stats-card"><div class="stats-card-value">${stats.activeDays}</div><div class="stats-card-label">Active Days</div></div>
+    </div>`;
+
+    // Top tools — bar chart + donut
+    const toolEntries = Object.entries(stats.toolCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (toolEntries.length > 0) {
+      const maxCount = toolEntries[0][1];
+      const totalTools = toolEntries.reduce((sum, e) => sum + e[1], 0);
+
+      const toolColors = toolEntries.map(([name]) => TOOL_COLORS[name] || TOOL_COLOR_DEFAULT);
+
+      html += `<div class="stats-section"><div class="stats-section-title">Top Tools</div>`;
+      html += `<div class="stats-tools-layout">`;
+
+      // Donut chart (left, large)
+      let gradientParts = [];
+      let cumPct = 0;
+      for (let i = 0; i < toolEntries.length; i++) {
+        const pct = (toolEntries[i][1] / totalTools) * 100;
+        gradientParts.push(`${toolColors[i]} ${cumPct}% ${cumPct + pct}%`);
+        cumPct += pct;
+      }
+      html += `<div class="stats-donut-wrap">`;
+      html += `<div class="stats-donut" data-gradient="${esc(gradientParts.join(', '))}"></div>`;
+      // Tool icons on donut segments >5%
+      let cumAngle = 0;
+      for (let i = 0; i < toolEntries.length; i++) {
+        const pct = (toolEntries[i][1] / totalTools) * 100;
+        const midAngle = cumAngle + pct / 2;
+        cumAngle += pct;
+        if (pct < 5) continue;
+        const icon = TOOL_ICONS[toolEntries[i][0]];
+        if (!icon) continue;
+        const rad = (midAngle * 3.6 - 90) * Math.PI / 180; // *3.6: pct→deg, -90: start from top
+        const r = 59; // midpoint of donut ring
+        const x = 80 + r * Math.cos(rad); // 80 = half of 160px donut
+        const y = 80 + r * Math.sin(rad);
+        html += `<svg class="stats-donut-icon" data-x="${x}" data-y="${y}" viewBox="0 0 16 16" fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`;
+      }
+      html += `</div>`;
+
+      // Bar chart (right) — labels colored to match donut
+      html += `<div class="stats-bars">`;
+      for (let i = 0; i < toolEntries.length; i++) {
+        const [tool, count] = toolEntries[i];
+        const pct = Math.round((count / maxCount) * 100);
+        html += `<div class="stats-bar-row">
+          <span class="stats-bar-label" data-color="${toolColors[i]}">${esc(tool)}</span>
+          <div class="stats-bar-track"><div class="stats-bar-fill" data-pct="${pct}"></div></div>
+          <span class="stats-bar-count">${count}</span>
+        </div>`;
+      }
+      html += `</div>`;
+
+      html += `</div></div>`;
+    }
+
+    // Activity heatmap — GitHub-style: days (X) × 2h slots (Y)
+    html += `<div class="stats-section"><div class="stats-section-title">Activity</div>`;
+    const now = new Date();
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      days.push(d);
+    }
+
+    // Aggregate into 2h slots and find max
+    let heatmapMax = 0;
+    const slotData = {};
+    for (const [key, v] of Object.entries(allStats.activityByDayHour)) {
+      const [day, hStr] = key.split('|');
+      const slot = Math.floor(Number(hStr) / 2);
+      const slotKey = day + '|' + slot;
+      slotData[slotKey] = (slotData[slotKey] || 0) + v;
+      if (slotData[slotKey] > heatmapMax) heatmapMax = slotData[slotKey];
+    }
+
+    const slotLabels = ['0h', '2h', '4h', '6h', '8h', '10h', '12h', '14h', '16h', '18h', '20h', '22h'];
+
+    html += `<div class="stats-heatmap-wrap">`;
+    // Y-axis labels
+    html += `<div class="stats-heatmap-ylabels">`;
+    for (let s = 0; s < 12; s++) {
+      html += `<div class="stats-heatmap-ylabel">${slotLabels[s]}</div>`;
+    }
+    html += `</div>`;
+
+    // Grid
+    html += `<div class="stats-heatmap-grid">`;
+    // Day header row
+    html += `<div class="stats-heatmap-xlabels">`;
+    for (const d of days) {
+      const showLabel = d.getDate() === 1 || d.getDay() === 1;
+      const lbl = showLabel ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
+      html += `<div class="stats-heatmap-xlabel">${lbl}</div>`;
+    }
+    html += `</div>`;
+    // Cells: each row = 2h slot, each column = 1 day
+    for (let s = 0; s < 12; s++) {
+      html += `<div class="stats-heatmap-row">`;
+      for (const d of days) {
+        const dayKey = d.toISOString().slice(0, 10);
+        const count = slotData[dayKey + '|' + s] || 0;
+        const level = heatmapMax === 0 ? 0 : count === 0 ? 0 : count <= heatmapMax * 0.25 ? 1 : count <= heatmapMax * 0.5 ? 2 : count <= heatmapMax * 0.75 ? 3 : 4;
+        const dayLabel = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        const slotStart = s * 2;
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        const dimClass = isWeekend ? ' heatmap-weekend' : '';
+        html += `<div class="stats-activity-cell${dimClass}" data-level="${level}" title="${dayLabel} ${slotStart}h\u2013${slotStart + 2}h: ${count} session${count !== 1 ? 's' : ''}"></div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+
+    // Legend — right under the grid
+    html += `<div class="stats-heatmap-legend">`;
+    html += `<div class="stats-activity-cell stats-legend-cell" data-level="0"></div><span class="stats-heatmap-legend-label">No activity</span>`;
+    html += `<span class="stats-heatmap-legend-sep"></span>`;
+    html += `<span class="stats-heatmap-legend-label">Less</span>`;
+    for (let l = 1; l <= 4; l++) {
+      html += `<div class="stats-activity-cell stats-legend-cell" data-level="${l}"></div>`;
+    }
+    html += `<span class="stats-heatmap-legend-label">More</span>`;
+    html += `</div></div>`;
+    html += `</div>`; // close stats-view
+
+    return html;
+  }
+
+  // ── "All sessions" sidebar entry + project click for stats ────────────────
+  function renderAllSessionsEntry() {
+    const isSelected = activeTab === 'stats' && statsProjectKey === null;
+    return `<div class="tree-all-sessions${isSelected ? ' selected' : ''}" data-action="select-all">All sessions</div>`;
+  }
+
+  // ── About view ─────────────────────────────────────────────────────────────
+  function showAbout() {
+    const convContainer = document.getElementById('conversation-container');
+    const convHeader = document.getElementById('conversation-header');
+    const sendBar = document.getElementById('send-bar');
+    if (convHeader) convHeader.style.display = 'none';
+    if (sendBar) sendBar.style.display = 'none';
+    if (convContainer) {
+      convContainer.innerHTML = renderAboutView();
+      convContainer.style.display = '';
+    }
+  }
+
+  function renderAboutView() {
+    const productivity = [
+      {
+        name: 'Agents',
+        icon: '\u{1F4AC}',
+        desc: 'Live dashboard of all your Claude Code sessions and subagents across every workspace. Monitor status, read conversations, send messages, and export to Markdown.',
+        ready: true,
+      },
+      {
+        name: 'Usage Stats',
+        icon: '\u{1F4CA}',
+        desc: 'Per-project analytics: top tools, session activity heatmap, prompt volume, code output, and duration metrics. All computed from your existing session data.',
+        ready: true,
+      },
+      {
+        name: 'Tips',
+        icon: '\u{1F4A1}',
+        desc: 'Contextual tip engine with declarative rules, severity levels, and awareness of your custom agents, skills, and hooks. Detects unused assets.',
+        ready: false,
+      },
+      {
+        name: 'Health',
+        icon: '\u{1F3E5}',
+        desc: 'Hook health dashboard. Validates exit codes, checks dependencies, detects stale hooks, and shows green/yellow/red status per hook.',
+        ready: false,
+      },
+      {
+        name: 'Yolobash',
+        icon: '\u{1F6E1}',
+        desc: 'Intelligent permission layer. Rule-based auto-approve, risk scoring for destructive commands, audit trail, and learning mode.',
+        ready: false,
+      },
+    ];
+
+    const learning = [
+      {
+        name: 'Bashback',
+        icon: '\u{1F4BB}',
+        desc: 'Study the bash commands Claude uses. Augmented history with flag decomposition, man page parsing, quiz mode, and generated exercises.',
+        ready: false,
+      },
+      {
+        name: 'Grammar Check',
+        icon: '\u{1F4DD}',
+        desc: 'Prompt quality feedback. Clarity analysis, rewrite suggestions, pattern tracking, and grammar/spelling checks for non-native speakers.',
+        ready: false,
+      },
+    ];
+
+    function renderCards(cards) {
+      let out = '';
+      for (const sp of cards) {
+        out += `<div class="about-card${sp.ready ? '' : ' about-card-soon'}">
+          <div class="about-card-header">
+            <span class="about-card-icon">${sp.icon}</span>
+            <span class="about-card-name">${esc(sp.name)}</span>
+            ${sp.ready ? '' : '<span class="about-badge-soon">SOON</span>'}
+          </div>
+          <div class="about-card-desc">${esc(sp.desc)}</div>
+        </div>`;
+      }
+      return out;
+    }
+
+    let html = `<div class="about-view">`;
+    html += `<div class="about-header">
+      <div class="about-title">Claude Code Agent Manager</div>
+      <div class="about-subtitle">The companion tool for serious Claude Code users</div>
+    </div>`;
+
+    html += `<div class="about-section">
+      <div class="about-section-title">Productivity</div>
+      <div class="about-grid">${renderCards(productivity)}</div>
+    </div>`;
+
+    html += `<div class="about-section">
+      <div class="about-section-title">Learning</div>
+      <div class="about-grid">${renderCards(learning)}</div>
+    </div>`;
+
+    html += `<div class="about-section">
+      <div class="about-section-title">Keyboard Shortcuts</div>
+      <div class="about-shortcuts">
+        <div class="about-shortcut"><kbd>j</kbd> / <kbd>k</kbd> Navigate sessions</div>
+        <div class="about-shortcut"><kbd>Enter</kbd> Open conversation</div>
+        <div class="about-shortcut"><kbd>h</kbd> / <kbd>l</kbd> Collapse / Expand</div>
+        <div class="about-shortcut"><kbd>p</kbd> Pin / Unpin project</div>
+        <div class="about-shortcut"><kbd>g</kbd><kbd>g</kbd> Jump to top</div>
+        <div class="about-shortcut"><kbd>G</kbd> Jump to bottom</div>
+        <div class="about-shortcut"><kbd>/</kbd> Focus search</div>
+        <div class="about-shortcut"><kbd>?</kbd> Toggle help</div>
+        <div class="about-shortcut"><kbd>Esc</kbd> Deselect / Close</div>
+        <div class="about-shortcut"><kbd>Tab</kbd> Switch sidebar / conversation</div>
+        <div class="about-shortcut"><kbd>1</kbd>..<kbd>3</kbd> Select tab</div>
+      </div>
+    </div>`;
+
+    html += `<div class="about-footer">
+      <a href="https://github.com/KyleJamesWalker/vscode-cc-agent-manager">GitHub</a>
+      <span class="about-footer-sep">\u00B7</span>
+      <span>Ctrl+Shift+A to open</span>
+    </div>`;
+
+    html += `</div>`;
+    return html;
   }
 
   // Configure marked for safe rendering
