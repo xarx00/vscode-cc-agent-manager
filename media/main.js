@@ -1971,9 +1971,9 @@
         <div class="about-shortcut"><kbd>G</kbd> Jump to bottom</div>
         <div class="about-shortcut"><kbd>/</kbd> Focus search</div>
         <div class="about-shortcut"><kbd>?</kbd> Toggle help</div>
-        <div class="about-shortcut"><kbd>1</kbd> Agents tab</div>
-        <div class="about-shortcut"><kbd>2</kbd> Stats tab</div>
-        <div class="about-shortcut"><kbd>3</kbd> About tab</div>
+        <div class="about-shortcut"><kbd>Esc</kbd> Deselect / Close</div>
+        <div class="about-shortcut"><kbd>Tab</kbd> Switch sidebar / conversation</div>
+        <div class="about-shortcut"><kbd>1</kbd>..<kbd>3</kbd> Select tab</div>
       </div>
     </div>`;
 
