@@ -298,17 +298,30 @@ function parseSession(
   };
 }
 
+function stripJsonc(text: string): string {
+  return text
+    .replace(/\/\/[^\n]*/g, '')        // single-line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '')  // block comments
+    .replace(/,(\s*[}\]])/g, '$1');    // trailing commas
+}
+
+const peacockColorCache = new Map<string, string | undefined>();
+
 function readPeacockColor(projectPath: string): string | undefined {
+  if (peacockColorCache.has(projectPath)) return peacockColorCache.get(projectPath);
+  let color: string | undefined;
   try {
     const settingsPath = path.join(projectPath, '.vscode', 'settings.json');
     if (!fs.existsSync(settingsPath)) return undefined;
     const content = fs.readFileSync(settingsPath, 'utf-8');
-    const settings = JSON.parse(content);
-    const color = settings['peacock.color'];
-    return typeof color === 'string' ? color : undefined;
+    const settings = JSON.parse(stripJsonc(content));
+    const raw = settings['peacock.color'];
+    color = typeof raw === 'string' ? raw : undefined;
   } catch {
-    return undefined;
+    color = undefined;
   }
+  peacockColorCache.set(projectPath, color);
+  return color;
 }
 
 export function readClaudeProjects(): ClaudeProject[] {
