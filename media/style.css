@@ -1601,6 +1601,10 @@ button {
 .stats-activity-cell[data-level="3"] { background: var(--vscode-progressBar-background, #007acc); opacity: 0.85; }
 .stats-activity-cell[data-level="4"] { background: var(--vscode-progressBar-background, #007acc); opacity: 1; }
 
+.stats-activity-cell.heatmap-weekend[data-level="0"] {
+  opacity: 0.6;
+}
+
 /* Heatmap legend */
 .stats-heatmap-legend {
   display: flex;

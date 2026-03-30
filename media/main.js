@@ -1761,6 +1761,7 @@
     }
 
     const stats = computeStats(sessions);
+    const allStats = statsTimeRange === 'all' ? stats : computeStats(allSessions);
 
     // Overview cards
     const formatNum = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
@@ -1851,7 +1852,7 @@
     // Aggregate into 2h slots and find max
     let heatmapMax = 0;
     const slotData = {};
-    for (const [key, v] of Object.entries(stats.activityByDayHour)) {
+    for (const [key, v] of Object.entries(allStats.activityByDayHour)) {
       const [day, hStr] = key.split('|');
       const slot = Math.floor(Number(hStr) / 2);
       const slotKey = day + '|' + slot;
@@ -1888,7 +1889,9 @@
         const level = heatmapMax === 0 ? 0 : count === 0 ? 0 : count <= heatmapMax * 0.25 ? 1 : count <= heatmapMax * 0.5 ? 2 : count <= heatmapMax * 0.75 ? 3 : 4;
         const dayLabel = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         const slotStart = s * 2;
-        html += `<div class="stats-activity-cell" data-level="${level}" title="${dayLabel} ${slotStart}h\u2013${slotStart + 2}h: ${count} session${count !== 1 ? 's' : ''}"></div>`;
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        const dimClass = isWeekend ? ' heatmap-weekend' : '';
+        html += `<div class="stats-activity-cell${dimClass}" data-level="${level}" title="${dayLabel} ${slotStart}h\u2013${slotStart + 2}h: ${count} session${count !== 1 ? 's' : ''}"></div>`;
       }
       html += `</div>`;
     }
