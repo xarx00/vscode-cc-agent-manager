@@ -1385,6 +1385,10 @@ button {
 }
 
 /* ── Stats View ────────────────────────────────────────────────────────── */
+.stats-view {
+  user-select: none;
+}
+
 .stats-header {
   padding: 14px 16px 6px;
 }
@@ -1736,6 +1740,7 @@ button {
   padding: 24px;
   max-width: 720px;
   margin: 0 auto;
+  user-select: none;
 }
 
 .about-header {

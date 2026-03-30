@@ -1735,7 +1735,7 @@
 
     // Overview cards
     const formatNum = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
-    let html = `<div class="stats-header"><span class="stats-title">${label}</span></div>`;
+    let html = `<div class="stats-view"><div class="stats-header"><span class="stats-title">${label}</span></div>`;
     html += `<div class="stats-cards">
       <div class="stats-card"><div class="stats-card-value">${stats.sessionCount}</div><div class="stats-card-label">Sessions</div></div>
       <div class="stats-card"><div class="stats-card-value">${stats.totalHours}h</div><div class="stats-card-label">Total Time</div></div>
@@ -1857,6 +1857,7 @@
     }
     html += `<span class="stats-heatmap-legend-label">More</span>`;
     html += `</div></div>`;
+    html += `</div>`; // close stats-view
 
     return html;
   }
