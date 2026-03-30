@@ -3,6 +3,37 @@
 (function () {
   const vscode = acquireVsCodeApi();
 
+  // Fixed colors per tool (consistent across renders)
+  const TOOL_COLORS = {
+    Bash:       '#007acc',
+    Read:       '#4ec9b0',
+    Edit:       '#e8a030',
+    Write:      '#cc6633',
+    Grep:       '#9b59b6',
+    Glob:       '#2ecc71',
+    WebSearch:  '#e74c3c',
+    WebFetch:   '#3498db',
+    Agent:      '#f39c12',
+    TodoWrite:  '#1abc9c',
+    ToolSearch: '#e67e22',
+    Skill:      '#8e44ad',
+  };
+  const TOOL_COLOR_DEFAULT = '#7f8c8d';
+
+  // Minimal 16x16 stroke-based SVG icons for tools (displayed on donut chart)
+  const TOOL_ICONS = {
+    Bash:       '<path d="M4 4l4 4-4 4" stroke-width="2"/><line x1="9" y1="12" x2="13" y2="12" stroke-width="2"/>',
+    Read:       '<circle cx="8" cy="8" r="2" fill="white"/><path d="M1 8c2-4 5-6 7-6s5 2 7 6c-2 4-5 6-7 6s-5-2-7-6z" stroke-width="1.5"/>',
+    Edit:       '<path d="M2 14l1-4L11 2l3 3-8 8z" fill="none" stroke-width="1.5"/>',
+    Write:      '<path d="M4 2v12h8V6l-4-4H4z" fill="none" stroke-width="1.5"/>',
+    Grep:       '<circle cx="7" cy="7" r="4" fill="none" stroke-width="2"/><line x1="10" y1="10" x2="14" y2="14" stroke-width="2"/>',
+    Glob:       '<path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" fill="none" stroke-width="1.2"/>',
+    WebSearch:  '<circle cx="8" cy="8" r="6" fill="none" stroke-width="1.5"/><line x1="2" y1="8" x2="14" y2="8" stroke-width="1"/><path d="M8 2c-2.5 3-2.5 9 0 12M8 2c2.5 3 2.5 9 0 12" fill="none" stroke-width="1"/>',
+    WebFetch:   '<path d="M3 3h10v10H3z" fill="none" stroke-width="1.5"/><line x1="3" y1="7" x2="13" y2="7" stroke-width="1.5"/>',
+    Agent:      '<circle cx="8" cy="5" r="3" fill="none" stroke-width="1.5"/><path d="M3 15c0-3 2.5-5 5-5s5 2 5 5" fill="none" stroke-width="1.5"/>',
+    TodoWrite:  '<path d="M3 4l2 2 4-4" fill="none" stroke-width="2"/><line x1="3" y1="12" x2="13" y2="12" stroke-width="1.5"/>',
+  };
+
   let allProjects = [];
   let filterText = '';
   let activeFilter = 'all';
@@ -1625,6 +1656,11 @@
       convContainer.querySelectorAll('.stats-donut').forEach((el) => {
         el.style.background = 'conic-gradient(' + el.dataset.gradient + ')';
       });
+      // Position donut icons
+      convContainer.querySelectorAll('.stats-donut-icon').forEach((el) => {
+        el.style.left = (parseFloat(el.dataset.x) - 9) + 'px'; // 9 = half icon width
+        el.style.top = (parseFloat(el.dataset.y) - 9) + 'px';
+      });
       // Apply bar label colors (serve as donut legend)
       convContainer.querySelectorAll('.stats-bar-label[data-color]').forEach((el) => {
         el.style.color = el.dataset.color;
@@ -1803,10 +1839,7 @@
       const maxCount = toolEntries[0][1];
       const totalTools = toolEntries.reduce((sum, e) => sum + e[1], 0);
 
-      const colors = [
-        '#007acc', '#4ec9b0', '#e8a030', '#cc6633', '#9b59b6',
-        '#2ecc71', '#e74c3c', '#3498db', '#f39c12', '#1abc9c'
-      ];
+      const toolColors = toolEntries.map(([name]) => TOOL_COLORS[name] || TOOL_COLOR_DEFAULT);
 
       html += `<div class="stats-section"><div class="stats-section-title">Top Tools</div>`;
       html += `<div class="stats-tools-layout">`;
@@ -1816,11 +1849,26 @@
       let cumPct = 0;
       for (let i = 0; i < toolEntries.length; i++) {
         const pct = (toolEntries[i][1] / totalTools) * 100;
-        gradientParts.push(`${colors[i]} ${cumPct}% ${cumPct + pct}%`);
+        gradientParts.push(`${toolColors[i]} ${cumPct}% ${cumPct + pct}%`);
         cumPct += pct;
       }
       html += `<div class="stats-donut-wrap">`;
       html += `<div class="stats-donut" data-gradient="${esc(gradientParts.join(', '))}"></div>`;
+      // Tool icons on donut segments >5%
+      let cumAngle = 0;
+      for (let i = 0; i < toolEntries.length; i++) {
+        const pct = (toolEntries[i][1] / totalTools) * 100;
+        const midAngle = cumAngle + pct / 2;
+        cumAngle += pct;
+        if (pct < 5) continue;
+        const icon = TOOL_ICONS[toolEntries[i][0]];
+        if (!icon) continue;
+        const rad = (midAngle * 3.6 - 90) * Math.PI / 180; // *3.6: pct→deg, -90: start from top
+        const r = 59; // midpoint of donut ring
+        const x = 80 + r * Math.cos(rad); // 80 = half of 160px donut
+        const y = 80 + r * Math.sin(rad);
+        html += `<svg class="stats-donut-icon" data-x="${x}" data-y="${y}" viewBox="0 0 16 16" fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`;
+      }
       html += `</div>`;
 
       // Bar chart (right) — labels colored to match donut
@@ -1829,7 +1877,7 @@
         const [tool, count] = toolEntries[i];
         const pct = Math.round((count / maxCount) * 100);
         html += `<div class="stats-bar-row">
-          <span class="stats-bar-label" data-color="${colors[i]}">${esc(tool)}</span>
+          <span class="stats-bar-label" data-color="${toolColors[i]}">${esc(tool)}</span>
           <div class="stats-bar-track"><div class="stats-bar-fill" data-pct="${pct}"></div></div>
           <span class="stats-bar-count">${count}</span>
         </div>`;

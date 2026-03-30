@@ -1526,10 +1526,22 @@ button {
 
 /* Donut chart */
 .stats-donut-wrap {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  width: 160px;
+  height: 160px;
+}
+
+.stats-donut-icon {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,0.5));
 }
 
 .stats-donut {
@@ -1537,8 +1549,8 @@ button {
   height: 160px;
   border-radius: 50%;
   /* gradient applied via JS */
-  mask: radial-gradient(circle at center, transparent 52px, #000 53px);
-  -webkit-mask: radial-gradient(circle at center, transparent 52px, #000 53px);
+  mask: radial-gradient(circle at center, transparent 38px, #000 39px);
+  -webkit-mask: radial-gradient(circle at center, transparent 38px, #000 39px);
 }
 
 /* Activity heatmap — GitHub-style: days (X) × hours (Y) */
