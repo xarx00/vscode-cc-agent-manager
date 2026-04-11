@@ -24,7 +24,11 @@ Based on issue #24 with silence = agreement:
 
 ### Hook Sources
 
-Hooks are defined in `~/.claude/settings.json` under the `hooks` key. Claude Code supports two hook formats:
+The Health Superpower scans hooks from two sources:
+
+#### 1. User-configured hooks in settings.json
+
+Defined in `~/.claude/settings.json` under the `hooks` key. Claude Code supports two formats:
 
 **Simple format** (paths only):
 ```json
@@ -66,7 +70,36 @@ Hooks are defined in `~/.claude/settings.json` under the `hooks` key. Claude Cod
 }
 ```
 
-The Health Superpower scans both formats and extracts executable paths from both.
+#### 2. Plugin-provided hooks
+
+Discovered by scanning `~/.claude/plugins/cache/` recursively for all `plugin.json` files. Each plugin can declare hooks in the same matcher-based format:
+
+```json
+{
+  "name": "cmux-integration",
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CMUX_WORKSPACE_ID\" ] && cmux notify '${notificationText}'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Processing
+
+For each hook found (user or plugin):
+1. **User hooks**: Extract file paths and validate them (checkHookHealth)
+2. **Plugin hooks**: Execute dry-run to validate functionality
+3. **Labeling**: Plugin hooks are labeled with source `[plugin-name]` for transparency
+4. **Aggregation**: All hooks reported with health status in the Health tab
 
 ### New Extension Host Function: `getHooksHealth()`
 
