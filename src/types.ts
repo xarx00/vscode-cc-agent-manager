@@ -67,3 +67,28 @@ export interface ManagerSettings {
   exportLinkStyle: 'markdown' | 'wiki';
   exportToolFormat: 'compact' | 'expanded' | 'omit';
 }
+
+export interface HookCheck {
+  name: string;
+  status: 'success' | 'warning' | 'failure';
+  message?: string;
+}
+
+export interface HookHealth {
+  path: string;
+  event: 'PreToolUse' | 'PostToolUse' | 'SessionStop';
+  status: 'healthy' | 'warning' | 'failure';
+  checks: HookCheck[];
+  lastRun: string;
+  duration: number;
+}
+
+export interface HookHealthReport {
+  timestamp: string;
+  hooks: HookHealth[];
+  summary: {
+    healthy: number;
+    warnings: number;
+    failures: number;
+  };
+}

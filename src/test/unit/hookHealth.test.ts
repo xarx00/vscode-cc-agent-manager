@@ -1,0 +1,197 @@
+jest.mock('os', () => ({ homedir: () => '/home/test' }));
+jest.mock('fs');
+
+// Mock child_process.exec with a callback-based implementation
+let mockExecFn: jest.Mock;
+jest.mock('child_process', () => ({
+  exec: (cmd: string, opts: any, cb: any) => {
+    mockExecFn(cmd, opts, cb);
+  },
+}));
+
+import * as fs from 'fs';
+import { checkHookHealth, getHooksHealth } from '../../hookHealth';
+import { HookHealth, HookHealthReport } from '../../types';
+
+describe('checkHookHealth', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+  });
+
+  test('returns failure when hook file does not exist', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+
+    const result = await checkHookHealth('/home/test/.claude/hooks/pre.sh', 'PreToolUse');
+
+    expect(result.status).toBe('failure');
+    expect(result.path).toBe('/home/test/.claude/hooks/pre.sh');
+    expect(result.event).toBe('PreToolUse');
+    expect(result.checks).toContainEqual({
+      name: 'File exists',
+      status: 'failure',
+      message: 'Hook file not found',
+    });
+  });
+
+  test('returns healthy when hook exists, readable, executable, and dry-run succeeds', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.accessSync).mockImplementation(() => {
+      // Both R_OK and X_OK pass
+    });
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await checkHookHealth('/home/test/.claude/hooks/pre.sh', 'PreToolUse');
+
+    expect(result.status).toBe('healthy');
+    expect(result.path).toBe('/home/test/.claude/hooks/pre.sh');
+    expect(result.event).toBe('PreToolUse');
+    expect(result.checks.map((c: any) => c.status)).toEqual(['success', 'success', 'success', 'success']);
+  });
+
+  test('returns warning when file is not executable but exists and readable', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.accessSync).mockImplementation((path: any, mode?: number) => {
+      // R_OK (4) passes, X_OK (1) throws
+      if (mode === 1) throw new Error('not executable');
+    });
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await checkHookHealth('/home/test/.claude/hooks/pre.sh', 'PreToolUse');
+
+    expect(result.status).toBe('warning');
+    expect(result.checks).toContainEqual({
+      name: 'Executable',
+      status: 'warning',
+      message: 'File is not executable (may work via shell)',
+    });
+  });
+
+  test('returns failure when dry-run execution fails', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.accessSync).mockImplementation(() => {
+      // Both pass
+    });
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      const err = new Error('exit code 1') as any;
+      err.code = 1;
+      cb(err);
+    });
+
+    const result = await checkHookHealth('/home/test/.claude/hooks/pre.sh', 'PreToolUse');
+
+    expect(result.status).toBe('failure');
+    expect(result.checks.find((c: any) => c.name === 'Dry-run with empty input')).toMatchObject({
+      status: 'failure',
+    });
+  });
+
+  test('records execution timing in duration field', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.accessSync).mockImplementation(() => {});
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await checkHookHealth('/home/test/.claude/hooks/pre.sh', 'PreToolUse');
+
+    expect(result.duration).toBeGreaterThanOrEqual(0);
+    expect(typeof result.duration).toBe('number');
+  });
+});
+
+describe('getHooksHealth', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+  });
+
+  test('returns empty report when settings file does not exist', async () => {
+    jest.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    const result = await getHooksHealth();
+
+    expect(result.hooks).toEqual([]);
+    expect(result.summary).toEqual({ healthy: 0, warnings: 0, failures: 0 });
+  });
+
+  test('returns empty report when hooks object is missing from settings', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('{"someKey": "value"}');
+
+    const result = await getHooksHealth();
+
+    expect(result.hooks).toEqual([]);
+    expect(result.summary).toEqual({ healthy: 0, warnings: 0, failures: 0 });
+  });
+
+  test('scans and checks all hooks from settings.json', async () => {
+    const settings = {
+      hooks: {
+        PreToolUse: ['/home/test/.claude/hooks/pre.sh'],
+        PostToolUse: ['/home/test/.claude/hooks/post.sh'],
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(settings));
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.accessSync).mockImplementation(() => {});
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await getHooksHealth();
+
+    expect(result.hooks).toHaveLength(2);
+    expect(result.hooks[0].event).toBe('PreToolUse');
+    expect(result.hooks[1].event).toBe('PostToolUse');
+  });
+
+  test('aggregates health status counts in summary', async () => {
+    const settings = {
+      hooks: {
+        PreToolUse: ['/home/test/.claude/hooks/pre.sh'],
+        PostToolUse: ['/home/test/.claude/hooks/post.sh'],
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(settings));
+
+    // First hook: healthy
+    // Second hook: failure
+    let callCount = 0;
+    jest.mocked(fs.existsSync).mockImplementation(() => {
+      callCount++;
+      return callCount === 1; // First file exists, second doesn't
+    });
+    jest.mocked(fs.accessSync).mockImplementation(() => {});
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await getHooksHealth();
+
+    expect(result.summary.healthy).toBe(1);
+    expect(result.summary.failures).toBe(1);
+    expect(result.summary.warnings).toBe(0);
+  });
+
+  test('includes timestamp in report', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('{"hooks":{}}');
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await getHooksHealth();
+
+    expect(result.timestamp).toBeDefined();
+    expect(new Date(result.timestamp)).toBeInstanceOf(Date);
+  });
+});
