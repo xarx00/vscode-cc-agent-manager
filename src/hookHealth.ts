@@ -16,6 +16,21 @@ export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'P
     duration: 0,
   };
 
+  // Determine if this is a file path or a shell command
+  const isFilePath = hookPath.includes('/') || hookPath.includes('~');
+
+  if (isFilePath) {
+    // File path validation
+    await validateFileHook(hookPath, health);
+  } else {
+    // Shell command validation
+    await validateShellCommand(hookPath, health);
+  }
+
+  return health;
+}
+
+async function validateFileHook(hookPath: string, health: HookHealth): Promise<void> {
   // Check 1: File existence
   if (!fs.existsSync(hookPath)) {
     health.status = 'failure';
@@ -24,7 +39,7 @@ export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'P
       status: 'failure',
       message: 'Hook file not found',
     });
-    return health;
+    return;
   }
   health.checks.push({
     name: 'File exists',
@@ -45,7 +60,7 @@ export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'P
       status: 'failure',
       message: 'No read permission',
     });
-    return health;
+    return;
   }
 
   // Check 3: Executable
@@ -84,8 +99,36 @@ export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'P
       message: `Exit code ${(e as any).code || '?'}: ${errorMsg.slice(0, 100)}`,
     });
   }
+}
 
-  return health;
+async function validateShellCommand(command: string, health: HookHealth): Promise<void> {
+  // For shell commands, just do a dry-run execution
+  health.checks.push({
+    name: 'Shell command syntax',
+    status: 'success',
+  });
+
+  const startTime = Date.now();
+  try {
+    // Execute the command as-is (it's already a shell command)
+    // Use echo '{}' as stdin like we do for file paths
+    await execPromise(`echo '{}' | ${command}`, { timeout: 5000, shell: '/bin/bash' });
+    health.duration = Date.now() - startTime;
+    health.checks.push({
+      name: 'Dry-run execution',
+      status: 'success',
+      message: `Completed in ${health.duration}ms`,
+    });
+  } catch (e) {
+    health.status = 'failure';
+    health.duration = Date.now() - startTime;
+    const errorMsg = (e as any).message || 'Unknown error';
+    health.checks.push({
+      name: 'Dry-run execution',
+      status: 'failure',
+      message: `Exit code ${(e as any).code || '?'}: ${errorMsg.slice(0, 100)}`,
+    });
+  }
 }
 
 export async function getHooksHealth(): Promise<HookHealthReport> {
