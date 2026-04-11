@@ -6,9 +6,9 @@ import { HookHealth, HookHealthReport } from './types';
 
 export const execPromise = promisify(exec);
 
-export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'PostToolUse' | 'SessionStop'): Promise<HookHealth> {
+export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'PostToolUse' | 'SessionStop', source?: string): Promise<HookHealth> {
   const health: HookHealth = {
-    path: hookPath,
+    path: source ? `[${source}] ${hookPath}` : hookPath,
     event,
     status: 'healthy',
     checks: [],
@@ -95,6 +95,16 @@ export async function getHooksHealth(): Promise<HookHealthReport> {
     summary: { healthy: 0, warnings: 0, failures: 0 },
   };
 
+  // Scan user-configured hooks in settings.json
+  await scanSettingsHooks(report);
+
+  // Scan plugin hooks
+  await scanPluginHooks(report);
+
+  return report;
+}
+
+async function scanSettingsHooks(report: HookHealthReport): Promise<void> {
   try {
     const settingsPath = `${os.homedir()}/.claude/settings.json`;
     const settingsContent = fs.readFileSync(settingsPath, 'utf-8');
@@ -115,10 +125,70 @@ export async function getHooksHealth(): Promise<HookHealthReport> {
       }
     }
   } catch (e) {
-    // Settings file not found or invalid JSON - return empty report
+    // Settings file not found or invalid JSON - continue
+  }
+}
+
+async function scanPluginHooks(report: HookHealthReport): Promise<void> {
+  try {
+    const pluginsDir = `${os.homedir()}/.claude/plugins/cache`;
+
+    if (!fs.existsSync(pluginsDir)) {
+      return;
+    }
+
+    // Recursively find all plugin.json files
+    const pluginJsonFiles = findPluginJsonFiles(pluginsDir);
+
+    for (const pluginJsonPath of pluginJsonFiles) {
+      try {
+        const pluginContent = fs.readFileSync(pluginJsonPath, 'utf-8');
+        const plugin = JSON.parse(pluginContent);
+        const hooks = plugin.hooks || {};
+        const pluginName = plugin.name || 'unknown-plugin';
+
+        for (const [event, hookEntries] of Object.entries(hooks)) {
+          const commands = extractPluginCommands(hookEntries, event);
+
+          for (const command of commands) {
+            const health = await checkHookHealth(command, event as 'PreToolUse' | 'PostToolUse' | 'SessionStop', pluginName);
+            report.hooks.push(health);
+
+            if (health.status === 'healthy') report.summary.healthy++;
+            else if (health.status === 'warning') report.summary.warnings++;
+            else if (health.status === 'failure') report.summary.failures++;
+          }
+        }
+      } catch (e) {
+        // Failed to parse this plugin, continue to next
+      }
+    }
+  } catch (e) {
+    // Plugins directory not found or not accessible - continue
+  }
+}
+
+function findPluginJsonFiles(dir: string): string[] {
+  const results: string[] = [];
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = `${dir}/${entry.name}`;
+
+      if (entry.isDirectory()) {
+        // Recurse into subdirectory
+        results.push(...findPluginJsonFiles(fullPath));
+      } else if (entry.name === 'plugin.json') {
+        results.push(fullPath);
+      }
+    }
+  } catch (e) {
+    // Directory not readable, skip
   }
 
-  return report;
+  return results;
 }
 
 /**
@@ -162,4 +232,28 @@ function extractHookPaths(hookEntries: any, event: string): string[] {
   }
 
   return paths;
+}
+
+/**
+ * Extract all hook commands from plugin hook entries.
+ * Similar to extractHookPaths but includes all commands, even shell commands.
+ */
+function extractPluginCommands(hookEntries: any, event: string): string[] {
+  const commands: string[] = [];
+
+  if (!Array.isArray(hookEntries)) {
+    return commands;
+  }
+
+  for (const entry of hookEntries) {
+    if (entry && typeof entry === 'object' && Array.isArray(entry.hooks)) {
+      for (const hook of entry.hooks) {
+        if (hook && typeof hook === 'object' && hook.type === 'command' && hook.command) {
+          commands.push(hook.command);
+        }
+      }
+    }
+  }
+
+  return commands;
 }

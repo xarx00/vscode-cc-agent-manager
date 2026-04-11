@@ -225,6 +225,19 @@ describe('getHooksHealth', () => {
     expect(result.hooks).toHaveLength(0);
   });
 
+  test('handles plugin hooks with source label', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ hooks: {} }));
+    jest.mocked(fs.existsSync).mockReturnValue(false); // No plugins dir
+
+    // Call checkHookHealth directly with a plugin source
+    const health = await checkHookHealth('echo test', 'PreToolUse', 'cmux-integration');
+
+    // Should include plugin name in the path
+    expect(health.path).toContain('cmux-integration');
+    expect(health.path).toContain('echo test');
+    expect(health.event).toBe('PreToolUse');
+  });
+
   test('aggregates health status counts in summary', async () => {
     const settings = {
       hooks: {
