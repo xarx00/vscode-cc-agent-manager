@@ -85,12 +85,14 @@
   let helpOverlayVisible = false;
 
   // Tab bar state
-  /** @type {'sessions' | 'stats' | 'about'} */
+  /** @type {'sessions' | 'stats' | 'health' | 'about'} */
   let activeTab = 'sessions';
   /** @type {string | null} project key selected for stats (null = all) */
   let statsProjectKey = null;
   /** @type {'today' | '7d' | '30d' | 'all'} */
   let statsTimeRange = 'all';
+  /** @type {any | null} */
+  let currentHealthReport = null;
 
   // Sidebar resize state
   let sidebarWidth = 280;
@@ -195,6 +197,28 @@
         if (input) input.disabled = false;
         if (submitBtn) { submitBtn.textContent = 'Send'; submitBtn.disabled = false; }
         if (errorEl) { errorEl.textContent = msg.error || 'Send failed'; errorEl.classList.add('visible'); }
+      }
+    }
+    if (msg.command === 'hooksHealth') {
+      currentHealthReport = msg.payload;
+      if (activeTab === 'health') {
+        const convContainer = document.getElementById('conversation-container');
+        if (convContainer) {
+          convContainer.innerHTML = renderHealthView(currentHealthReport);
+          convContainer.style.display = '';
+          // Attach event listeners for hook expansion and refresh
+          convContainer.querySelectorAll('.health-hook-header').forEach((header) => {
+            header.addEventListener('click', () => {
+              header.closest('.health-hook').classList.toggle('expanded');
+            });
+          });
+          const refreshBtn = convContainer.getElementById('health-refresh');
+          if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+              vscode.postMessage({ command: 'getHooksHealth' });
+            });
+          }
+        }
       }
     }
   });
@@ -1528,8 +1552,9 @@
         e.preventDefault(); showHelpOverlay(); break;
       case '1':
       case '2':
-      case '3': {
-        const tabs = ['sessions', 'stats', 'about'];
+      case '3':
+      case '4': {
+        const tabs = ['sessions', 'stats', 'health', 'about'];
         const idx = Number(e.key) - 1;
         const tab = tabs[idx];
         if (tab && tab !== activeTab) {
@@ -1537,6 +1562,7 @@
           const tabBar = document.getElementById('tab-bar');
           if (tabBar) tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
           if (tab === 'stats') showStats();
+          else if (tab === 'health') showHealth();
           else if (tab === 'about') showAbout();
           else hideStats();
         }
@@ -1634,6 +1660,8 @@
       tabBar.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
       if (tab === 'stats') {
         showStats();
+      } else if (tab === 'health') {
+        showHealth();
       } else if (tab === 'about') {
         showAbout();
       } else {
@@ -1967,6 +1995,67 @@
   function renderAllSessionsEntry() {
     const isSelected = activeTab === 'stats' && statsProjectKey === null;
     return `<div class="tree-all-sessions${isSelected ? ' selected' : ''}" data-action="select-all">All sessions</div>`;
+  }
+
+  // ── Health view ────────────────────────────────────────────────────────────
+  function showHealth() {
+    const convContainer = document.getElementById('conversation-container');
+    const convHeader = document.getElementById('conversation-header');
+    const sendBar = document.getElementById('send-bar');
+    if (convHeader) convHeader.style.display = 'none';
+    if (sendBar) sendBar.style.display = 'none';
+    if (convContainer) {
+      convContainer.innerHTML = '<div class="health-loading">Loading hook status…</div>';
+      convContainer.style.display = '';
+      vscode.postMessage({ command: 'getHooksHealth' });
+    }
+  }
+
+  function renderHealthView(report) {
+    if (!report || !report.hooks) {
+      return '<div class="health-empty">No hooks configured</div>';
+    }
+
+    const hooks = report.hooks || [];
+    const summary = report.summary || { healthy: 0, warnings: 0, failures: 0 };
+
+    let hooksHtml = '';
+    for (const hook of hooks) {
+      const statusIcon = hook.status === 'healthy' ? '✓' : hook.status === 'warning' ? '⚠' : '✕';
+      const statusColor = hook.status === 'healthy' ? 'healthy' : hook.status === 'warning' ? 'warning' : 'failure';
+
+      let checksHtml = '';
+      for (const check of (hook.checks || [])) {
+        const checkIcon = check.status === 'success' ? '✓' : check.status === 'warning' ? '⚠' : '✕';
+        checksHtml += `<div class="health-check ${check.status}">
+          <span class="health-check-icon">${checkIcon}</span>
+          <span class="health-check-name">${check.name}${check.message ? ': ' + check.message : ''}</span>
+        </div>`;
+      }
+
+      hooksHtml += `<div class="health-hook" data-status="${hook.status}">
+        <div class="health-hook-header">
+          <span class="health-hook-icon">${statusIcon}</span>
+          <span class="health-hook-title">${hook.event}</span>
+          <span class="health-hook-path">${hook.path}</span>
+        </div>
+        <div class="health-hook-details">
+          ${checksHtml}
+        </div>
+      </div>`;
+    }
+
+    return `<div class="health-view">
+      <div class="health-summary">
+        <div class="health-stat healthy"><span class="health-icon">●</span><span>Healthy: ${summary.healthy}</span></div>
+        <div class="health-stat warning"><span class="health-icon">⚠</span><span>Warnings: ${summary.warnings}</span></div>
+        <div class="health-stat failure"><span class="health-icon">✕</span><span>Failures: ${summary.failures}</span></div>
+        <button id="health-refresh" class="health-refresh-btn">Refresh</button>
+      </div>
+      <div class="health-hooks">
+        ${hooksHtml}
+      </div>
+    </div>`;
   }
 
   // ── About view ─────────────────────────────────────────────────────────────

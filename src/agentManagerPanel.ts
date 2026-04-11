@@ -569,6 +569,7 @@ export class AgentManagerPanel {
       <div id="tab-bar">
         <button class="tab-btn active" data-tab="sessions">Agents</button>
         <button class="tab-btn" data-tab="stats">Stats</button>
+        <button class="tab-btn" data-tab="health">Health</button>
         <button class="tab-btn" data-tab="about">About</button>
       </div>
       <div id="conversation-header">
@@ -588,6 +589,9 @@ export class AgentManagerPanel {
           </svg>
           <p>Click on a session or agent in the sidebar to view the conversation.</p>
         </div>
+      </div>
+      <div id="health-container" style="display:none">
+        <div class="health-loading">Loading hook status…</div>
       </div>
       <div id="send-bar">
         <div id="send-bar-inner">
