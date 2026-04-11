@@ -6,6 +6,7 @@ import { readClaudeProjects, readConversation } from './claudeReader';
 import { ManagerSettings, ClaudeProject, ClaudeSession } from './types';
 import { exportConversation, expandTemplate } from './exporter';
 import { TerminalManager } from './terminalManager';
+import { getHooksHealth } from './hookHealth';
 
 const DEFAULT_SETTINGS: ManagerSettings = {
   soundEnabled: false,
@@ -181,6 +182,27 @@ export class AgentManagerPanel {
                 this._panel.webview.postMessage({
                   command: 'sendMessageResult',
                   success: false,
+                  error: e instanceof Error ? e.message : String(e),
+                });
+              }
+            })();
+            break;
+          case 'getHooksHealth':
+            void (async () => {
+              try {
+                const health = await getHooksHealth();
+                this._panel.webview.postMessage({
+                  command: 'hooksHealth',
+                  payload: health,
+                });
+              } catch (e: unknown) {
+                this._panel.webview.postMessage({
+                  command: 'hooksHealth',
+                  payload: {
+                    timestamp: new Date().toISOString(),
+                    hooks: [],
+                    summary: { healthy: 0, warnings: 0, failures: 0 },
+                  },
                   error: e instanceof Error ? e.message : String(e),
                 });
               }
