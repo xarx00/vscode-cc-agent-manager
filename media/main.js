@@ -212,7 +212,7 @@
               header.closest('.health-hook').classList.toggle('expanded');
             });
           });
-          const refreshBtn = convContainer.getElementById('health-refresh');
+          const refreshBtn = convContainer.querySelector('#health-refresh');
           if (refreshBtn) {
             refreshBtn.addEventListener('click', () => {
               vscode.postMessage({ command: 'getHooksHealth' });
