@@ -101,9 +101,11 @@ export async function getHooksHealth(): Promise<HookHealthReport> {
     const settings = JSON.parse(settingsContent);
     const hooks = settings.hooks || {};
 
-    for (const [event, hookPaths] of Object.entries(hooks)) {
-      for (const hookPath of hookPaths as string[]) {
-        const expandedPath = hookPath.replace('~', os.homedir());
+    for (const [event, hookEntries] of Object.entries(hooks)) {
+      const paths = extractHookPaths(hookEntries, event);
+
+      for (const path of paths) {
+        const expandedPath = path.replace('~', os.homedir());
         const health = await checkHookHealth(expandedPath, event as 'PreToolUse' | 'PostToolUse' | 'SessionStop');
         report.hooks.push(health);
 
@@ -117,4 +119,47 @@ export async function getHooksHealth(): Promise<HookHealthReport> {
   }
 
   return report;
+}
+
+/**
+ * Extract hook paths from both simple (string array) and complex (matcher-based) formats.
+ *
+ * Simple format: ["~/.claude/hooks/script.sh"]
+ * Complex format: [{ matcher: "Bash", hooks: [{ type: "command", command: "/path/to/script" }] }]
+ */
+function extractHookPaths(hookEntries: any, event: string): string[] {
+  const paths: string[] = [];
+
+  if (!Array.isArray(hookEntries)) {
+    return paths;
+  }
+
+  for (const entry of hookEntries) {
+    // Simple format: entry is a string path
+    if (typeof entry === 'string') {
+      paths.push(entry);
+    }
+    // Complex format: entry is an object with { matcher, hooks }
+    else if (entry && typeof entry === 'object' && Array.isArray(entry.hooks)) {
+      for (const hook of entry.hooks) {
+        if (hook && typeof hook === 'object') {
+          // Extract path from command hook type
+          if (hook.type === 'command' && hook.command) {
+            // Extract the first token (the executable) from the command string
+            // Handle cases like: "/path/to/script", "script arg1 arg2", "echo Done"
+            const commandTokens = hook.command.trim().split(/\s+/);
+            if (commandTokens.length > 0) {
+              const executable = commandTokens[0];
+              // Only validate paths that look like file paths (contain / or ~)
+              if (executable.includes('/') || executable.includes('~')) {
+                paths.push(executable);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return paths;
 }

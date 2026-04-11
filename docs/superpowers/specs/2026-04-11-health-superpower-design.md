@@ -24,17 +24,49 @@ Based on issue #24 with silence = agreement:
 
 ### Hook Sources
 
-Hooks are defined in `~/.claude/settings.json` under the `hooks` key. The extension scans:
+Hooks are defined in `~/.claude/settings.json` under the `hooks` key. Claude Code supports two hook formats:
 
+**Simple format** (paths only):
 ```json
 {
   "hooks": {
-    "PreToolUse": ["~/.claude/hooks/pre-tool-use.sh"],
-    "PostToolUse": ["~/.claude/hooks/post-tool-use.sh"],
-    "SessionStop": ["~/.claude/hooks/session-stop.sh"]
+    "PreToolUse": ["~/.claude/hooks/pre.sh"],
+    "PostToolUse": ["~/.claude/hooks/post.sh"]
   }
 }
 ```
+
+**Complex format** (matcher-based, Claude Code's current format):
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/script.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo Done"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The Health Superpower scans both formats and extracts executable paths from both.
 
 ### New Extension Host Function: `getHooksHealth()`
 
@@ -45,7 +77,7 @@ export async function getHooksHealth(): Promise<HookHealthReport> {
   const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
   const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
   const hooks = settings.hooks || {};
-  
+
   const report: HookHealthReport = {
     timestamp: new Date().toISOString(),
     hooks: [],
@@ -57,7 +89,7 @@ export async function getHooksHealth(): Promise<HookHealthReport> {
       const expandedPath = hookPath.replace('~', os.homedir());
       const health = await checkHookHealth(expandedPath, event);
       report.hooks.push(health);
-      
+
       if (health.status === 'healthy') report.summary.healthy++;
       else if (health.status === 'warning') report.summary.warnings++;
       else if (health.status === 'failure') report.summary.failures++;
@@ -248,7 +280,7 @@ When `activeTab === 'health'`:
 ┌─ Health ──────────────────────────────────────────┐
 │ ┌─ Summary ─────────────────────────────────────┐ │
 │ │  ● Healthy: 3   ⚠ Warnings: 1   ✕ Failures: 2 │ │
-│ │                                    [Refresh]   │ │
+│ │                                    [Refresh]  │ │
 │ └───────────────────────────────────────────────┘ │
 │                                                   │
 │ ┌─ Hooks ───────────────────────────────────────┐ │
@@ -257,16 +289,16 @@ When `activeTab === 'health'`:
 │ │    ✓ File readable                            │ │
 │ │    ✓ Executable                               │ │
 │ │    ✓ Dry-run: 43ms                            │ │
-│ │                                                │ │
+│ │                                               │ │
 │ │  ⚠ PostToolUse: ~/.claude/hooks/post.sh       │ │
 │ │    ✓ File exists                              │ │
 │ │    ✓ File readable                            │ │
 │ │    ⚠ Not executable (may work via shell)      │ │
 │ │    ✓ Dry-run: 51ms                            │ │
-│ │                                                │ │
+│ │                                               │ │
 │ │  ✕ SessionStop: ~/.claude/hooks/stop.sh       │ │
 │ │    ✕ File not found                           │ │
-│ │                                                │ │
+│ │                                               │ │
 │ └───────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────┘
 ```

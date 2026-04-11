@@ -134,7 +134,7 @@ describe('getHooksHealth', () => {
     expect(result.summary).toEqual({ healthy: 0, warnings: 0, failures: 0 });
   });
 
-  test('scans and checks all hooks from settings.json', async () => {
+  test('scans and checks all hooks from settings.json (simple format)', async () => {
     const settings = {
       hooks: {
         PreToolUse: ['/home/test/.claude/hooks/pre.sh'],
@@ -153,6 +153,76 @@ describe('getHooksHealth', () => {
     expect(result.hooks).toHaveLength(2);
     expect(result.hooks[0].event).toBe('PreToolUse');
     expect(result.hooks[1].event).toBe('PostToolUse');
+  });
+
+  test('scans and checks hooks from settings.json (complex matcher format)', async () => {
+    const settings = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [
+              {
+                type: 'command',
+                command: '/home/test/.claude/hooks/pre.sh',
+              },
+            ],
+          },
+        ],
+        PostToolUse: [
+          {
+            matcher: 'Edit|Write',
+            hooks: [
+              {
+                type: 'command',
+                command: '/home/test/.claude/hooks/post.sh arg1 arg2',
+              },
+            ],
+          },
+        ],
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(settings));
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.accessSync).mockImplementation(() => {});
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await getHooksHealth();
+
+    expect(result.hooks).toHaveLength(2);
+    expect(result.hooks[0].event).toBe('PreToolUse');
+    expect(result.hooks[0].path).toBe('/home/test/.claude/hooks/pre.sh');
+    expect(result.hooks[1].event).toBe('PostToolUse');
+    expect(result.hooks[1].path).toBe('/home/test/.claude/hooks/post.sh');
+  });
+
+  test('ignores non-path commands in complex format', async () => {
+    const settings = {
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [
+              {
+                type: 'command',
+                command: 'echo Done',
+              },
+            ],
+          },
+        ],
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(settings));
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await getHooksHealth();
+
+    // Echo command has no path, so it should be ignored
+    expect(result.hooks).toHaveLength(0);
   });
 
   test('aggregates health status counts in summary', async () => {
