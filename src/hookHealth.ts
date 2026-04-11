@@ -16,15 +16,22 @@ export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'P
     duration: 0,
   };
 
-  // Determine if this is a file path or a shell command
-  const isFilePath = hookPath.includes('/') || hookPath.includes('~');
+  // Plugin hooks are always shell commands (they may contain variable substitutions like ${CLAUDE_PLUGIN_ROOT})
+  // User-configured hooks are file paths (extracted by extractHookPaths which filters for / or ~)
+  const isPluginHook = !!source;
 
-  if (isFilePath) {
-    // File path validation
-    await validateFileHook(hookPath, health);
-  } else {
-    // Shell command validation
+  if (isPluginHook) {
+    // Plugin hooks are shell commands
     await validateShellCommand(hookPath, health);
+  } else {
+    // User hooks are file paths
+    const isFilePath = hookPath.includes('/') || hookPath.includes('~');
+    if (isFilePath) {
+      await validateFileHook(hookPath, health);
+    } else {
+      // Bare command from settings (e.g., "echo Done")
+      await validateShellCommand(hookPath, health);
+    }
   }
 
   return health;
@@ -120,14 +127,27 @@ async function validateShellCommand(command: string, health: HookHealth): Promis
       message: `Completed in ${health.duration}ms`,
     });
   } catch (e) {
-    health.status = 'failure';
     health.duration = Date.now() - startTime;
     const errorMsg = (e as any).message || 'Unknown error';
-    health.checks.push({
-      name: 'Dry-run execution',
-      status: 'failure',
-      message: `Exit code ${(e as any).code || '?'}: ${errorMsg.slice(0, 100)}`,
-    });
+    const exitCode = (e as any).code || 'unknown';
+
+    // For shell commands with conditionals (e.g., "[ -n $VAR ] && command"),
+    // exit code 1 from the test operator is normal and expected when variables
+    // aren't set in the dry-run environment. Treat this as a warning, not failure.
+    if (exitCode === 1 && (command.includes('&&') || command.includes('||'))) {
+      health.checks.push({
+        name: 'Dry-run execution',
+        status: 'warning',
+        message: `Conditional returned false (expected in dry-run with unset variables)`,
+      });
+    } else {
+      health.status = 'failure';
+      health.checks.push({
+        name: 'Dry-run execution',
+        status: 'failure',
+        message: `Exit code ${exitCode}: ${errorMsg.slice(0, 100)}`,
+      });
+    }
   }
 }
 
