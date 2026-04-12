@@ -115,6 +115,24 @@ async function validateShellCommand(command: string, health: HookHealth): Promis
     status: 'success',
   });
 
+  // Plugin hooks frequently reference env vars that Claude Code defines only
+  // at invocation time (${CLAUDE_PLUGIN_ROOT}, ${CLAUDE_PROJECT_DIR}, ...).
+  // Even if such a variable happens to be set in our current environment,
+  // its value is not meaningful for validating this specific hook — running
+  // the command would either expand to the wrong path or be rejected.
+  // Surface this honestly as a warning rather than a spurious failure.
+  const envVars = findEnvVarReferences(command);
+  if (envVars.length > 0) {
+    health.status = 'warning';
+    health.duration = 0;
+    health.checks.push({
+      name: 'Dry-run execution',
+      status: 'warning',
+      message: `Skipped: command references env vars (${envVars.join(', ')}) that only Claude Code can resolve`,
+    });
+    return;
+  }
+
   const startTime = Date.now();
   try {
     // Execute the command as-is (it's already a shell command)
@@ -244,6 +262,17 @@ async function scanPluginHooks(report: HookHealthReport): Promise<void> {
   } catch (e) {
     // Plugins directory not found or not accessible - continue
   }
+}
+
+function findEnvVarReferences(command: string): string[] {
+  // Matches ${VAR}, ${VAR:-default}, and $VAR forms.
+  const pattern = /\$\{?([A-Z_][A-Z0-9_]*)(?::-[^}]*)?\}?/gi;
+  const found = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(command)) !== null) {
+    found.add(match[1]);
+  }
+  return Array.from(found);
 }
 
 function readSiblingHooksFile(pluginJsonPath: string): Record<string, unknown> | null {

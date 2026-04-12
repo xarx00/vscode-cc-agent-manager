@@ -411,6 +411,23 @@ describe('getHooksHealth', () => {
     expect(result.hooks[0].path).not.toContain('superpowers-cursor');
   });
 
+  test('degrades to warning when plugin hook command contains unresolved env vars', async () => {
+    // Commands like "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" cannot be safely
+    // dry-run from the extension because CLAUDE_PLUGIN_ROOT is only defined by
+    // Claude Code at invocation time. We should not report them as failures.
+    const health = await checkHookHealth(
+      '"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" session-start',
+      'SessionStart',
+      'superpowers',
+    );
+
+    expect(health.status).toBe('warning');
+    const dryRun = health.checks.find((c: any) => c.name === 'Dry-run execution');
+    expect(dryRun).toBeDefined();
+    expect(dryRun!.status).toBe('warning');
+    expect(dryRun!.message).toMatch(/env/i);
+  });
+
   test('aggregates health status counts in summary', async () => {
     const settings = {
       hooks: {
