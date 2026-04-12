@@ -6,7 +6,7 @@ import { HookHealth, HookHealthReport } from './types';
 
 export const execPromise = promisify(exec);
 
-export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'PostToolUse' | 'SessionStop', source?: string): Promise<HookHealth> {
+export async function checkHookHealth(hookPath: string, event: string, source?: string): Promise<HookHealth> {
   const health: HookHealth = {
     path: source ? `[${source}] ${hookPath}` : hookPath,
     event,
@@ -179,7 +179,7 @@ async function scanSettingsHooks(report: HookHealthReport): Promise<void> {
 
       for (const path of paths) {
         const expandedPath = path.replace('~', os.homedir());
-        const health = await checkHookHealth(expandedPath, event as 'PreToolUse' | 'PostToolUse' | 'SessionStop');
+        const health = await checkHookHealth(expandedPath, event);
         report.hooks.push(health);
 
         if (health.status === 'healthy') report.summary.healthy++;
@@ -214,7 +214,7 @@ async function scanPluginHooks(report: HookHealthReport): Promise<void> {
           const commands = extractPluginCommands(hookEntries, event);
 
           for (const command of commands) {
-            const health = await checkHookHealth(command, event as 'PreToolUse' | 'PostToolUse' | 'SessionStop', pluginName);
+            const health = await checkHookHealth(command, event, pluginName);
             report.hooks.push(health);
 
             if (health.status === 'healthy') report.summary.healthy++;

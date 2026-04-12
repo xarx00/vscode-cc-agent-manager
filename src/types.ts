@@ -76,7 +76,7 @@ export interface HookCheck {
 
 export interface HookHealth {
   path: string;
-  event: 'PreToolUse' | 'PostToolUse' | 'SessionStop';
+  event: string;
   status: 'healthy' | 'warning' | 'failure';
   checks: HookCheck[];
   lastRun: string;
