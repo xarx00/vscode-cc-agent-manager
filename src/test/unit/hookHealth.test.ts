@@ -321,6 +321,96 @@ describe('getHooksHealth', () => {
     expect(result.hooks[0].path).toContain('/bin/true');
   });
 
+  test('ignores .cursor-plugin manifests when .claude-plugin exists alongside', async () => {
+    // Some plugins ship both a Claude Code manifest (.claude-plugin/plugin.json)
+    // and a Cursor manifest (.cursor-plugin/plugin.json) in the same directory.
+    // Only the Claude Code one should be scanned, otherwise the same sibling
+    // hooks/hooks.json gets counted twice.
+    const pluginRoot = '/home/test/.claude/plugins/cache/acme/superpowers/1.0.0';
+    const claudeManifest = `${pluginRoot}/.claude-plugin/plugin.json`;
+    const cursorManifest = `${pluginRoot}/.cursor-plugin/plugin.json`;
+    const hooksPath = `${pluginRoot}/hooks/hooks.json`;
+
+    const hooksFile = {
+      hooks: {
+        SessionStart: [
+          {
+            matcher: 'startup',
+            hooks: [
+              {
+                type: 'command',
+                command: '/bin/true',
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    jest.mocked(fs.readdirSync).mockImplementation(((dir: any) => {
+      const d = String(dir);
+      const makeEntry = (name: string, isDir: boolean) => ({
+        name,
+        isDirectory: () => isDir,
+        isFile: () => !isDir,
+      });
+      if (d === '/home/test/.claude/plugins/cache') {
+        return [makeEntry('acme', true)];
+      }
+      if (d === '/home/test/.claude/plugins/cache/acme') {
+        return [makeEntry('superpowers', true)];
+      }
+      if (d === '/home/test/.claude/plugins/cache/acme/superpowers') {
+        return [makeEntry('1.0.0', true)];
+      }
+      if (d === pluginRoot) {
+        return [
+          makeEntry('.claude-plugin', true),
+          makeEntry('.cursor-plugin', true),
+          makeEntry('hooks', true),
+        ];
+      }
+      if (d === `${pluginRoot}/.claude-plugin` || d === `${pluginRoot}/.cursor-plugin`) {
+        return [makeEntry('plugin.json', false)];
+      }
+      if (d === `${pluginRoot}/hooks`) {
+        return [makeEntry('hooks.json', false)];
+      }
+      return [];
+    }) as any);
+
+    jest.mocked(fs.existsSync).mockImplementation((p: any) => {
+      return p === '/home/test/.claude/plugins/cache' || p === hooksPath;
+    });
+
+    jest.mocked(fs.readFileSync).mockImplementation((p: any) => {
+      const s = String(p);
+      if (s === '/home/test/.claude/settings.json') {
+        return JSON.stringify({ hooks: {} });
+      }
+      if (s === claudeManifest) {
+        return JSON.stringify({ name: 'superpowers' });
+      }
+      if (s === cursorManifest) {
+        return JSON.stringify({ name: 'superpowers-cursor' });
+      }
+      if (s === hooksPath) {
+        return JSON.stringify(hooksFile);
+      }
+      throw new Error(`Unexpected readFileSync: ${s}`);
+    });
+
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await getHooksHealth();
+
+    expect(result.hooks).toHaveLength(1);
+    expect(result.hooks[0].path).toContain('[superpowers]');
+    expect(result.hooks[0].path).not.toContain('superpowers-cursor');
+  });
+
   test('aggregates health status counts in summary', async () => {
     const settings = {
       hooks: {

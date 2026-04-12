@@ -276,6 +276,12 @@ function findPluginJsonFiles(dir: string): string[] {
       const fullPath = `${dir}/${entry.name}`;
 
       if (entry.isDirectory()) {
+        // Skip foreign manifest directories (e.g. .cursor-plugin, .gemini-plugin).
+        // Only the Claude Code manifest directory is a valid source for this extension,
+        // otherwise the same sibling hooks/hooks.json gets counted once per manifest.
+        if (entry.name.startsWith('.') && entry.name !== '.claude-plugin') {
+          continue;
+        }
         // Recurse into subdirectory
         results.push(...findPluginJsonFiles(fullPath));
       } else if (entry.name === 'plugin.json') {
