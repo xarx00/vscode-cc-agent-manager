@@ -6,7 +6,7 @@ import { HookHealth, HookHealthReport } from './types';
 
 export const execPromise = promisify(exec);
 
-export async function checkHookHealth(hookPath: string, event: 'PreToolUse' | 'PostToolUse' | 'SessionStop', source?: string): Promise<HookHealth> {
+export async function checkHookHealth(hookPath: string, event: string, source?: string): Promise<HookHealth> {
   const health: HookHealth = {
     path: source ? `[${source}] ${hookPath}` : hookPath,
     event,
@@ -115,6 +115,24 @@ async function validateShellCommand(command: string, health: HookHealth): Promis
     status: 'success',
   });
 
+  // Plugin hooks frequently reference env vars that Claude Code defines only
+  // at invocation time (${CLAUDE_PLUGIN_ROOT}, ${CLAUDE_PROJECT_DIR}, ...).
+  // Even if such a variable happens to be set in our current environment,
+  // its value is not meaningful for validating this specific hook — running
+  // the command would either expand to the wrong path or be rejected.
+  // Surface this honestly as a warning rather than a spurious failure.
+  const envVars = findEnvVarReferences(command);
+  if (envVars.length > 0) {
+    health.status = 'warning';
+    health.duration = 0;
+    health.checks.push({
+      name: 'Dry-run execution',
+      status: 'warning',
+      message: `Skipped: command references env vars (${envVars.join(', ')}) that only Claude Code can resolve`,
+    });
+    return;
+  }
+
   const startTime = Date.now();
   try {
     // Execute the command as-is (it's already a shell command)
@@ -179,7 +197,7 @@ async function scanSettingsHooks(report: HookHealthReport): Promise<void> {
 
       for (const path of paths) {
         const expandedPath = path.replace('~', os.homedir());
-        const health = await checkHookHealth(expandedPath, event as 'PreToolUse' | 'PostToolUse' | 'SessionStop');
+        const health = await checkHookHealth(expandedPath, event);
         report.hooks.push(health);
 
         if (health.status === 'healthy') report.summary.healthy++;
@@ -207,19 +225,34 @@ async function scanPluginHooks(report: HookHealthReport): Promise<void> {
       try {
         const pluginContent = fs.readFileSync(pluginJsonPath, 'utf-8');
         const plugin = JSON.parse(pluginContent);
-        const hooks = plugin.hooks || {};
         const pluginName = plugin.name || 'unknown-plugin';
 
-        for (const [event, hookEntries] of Object.entries(hooks)) {
-          const commands = extractPluginCommands(hookEntries, event);
+        // Hooks can live in two places:
+        // 1. Inline in plugin.json under a `hooks` key (some custom plugins)
+        // 2. In a sibling file `<pluginRoot>/hooks/hooks.json` relative to
+        //    the directory containing .claude-plugin/plugin.json (the format
+        //    used by official Claude Code plugins like `superpowers`)
+        const hookSources: any[] = [];
+        if (plugin.hooks) {
+          hookSources.push(plugin.hooks);
+        }
+        const siblingHooks = readSiblingHooksFile(pluginJsonPath);
+        if (siblingHooks) {
+          hookSources.push(siblingHooks);
+        }
 
-          for (const command of commands) {
-            const health = await checkHookHealth(command, event as 'PreToolUse' | 'PostToolUse' | 'SessionStop', pluginName);
-            report.hooks.push(health);
+        for (const hooks of hookSources) {
+          for (const [event, hookEntries] of Object.entries(hooks)) {
+            const commands = extractPluginCommands(hookEntries, event);
 
-            if (health.status === 'healthy') report.summary.healthy++;
-            else if (health.status === 'warning') report.summary.warnings++;
-            else if (health.status === 'failure') report.summary.failures++;
+            for (const command of commands) {
+              const health = await checkHookHealth(command, event, pluginName);
+              report.hooks.push(health);
+
+              if (health.status === 'healthy') report.summary.healthy++;
+              else if (health.status === 'warning') report.summary.warnings++;
+              else if (health.status === 'failure') report.summary.failures++;
+            }
           }
         }
       } catch (e) {
@@ -228,6 +261,37 @@ async function scanPluginHooks(report: HookHealthReport): Promise<void> {
     }
   } catch (e) {
     // Plugins directory not found or not accessible - continue
+  }
+}
+
+function findEnvVarReferences(command: string): string[] {
+  // Matches ${VAR}, ${VAR:-default}, and $VAR forms.
+  const pattern = /\$\{?([A-Z_][A-Z0-9_]*)(?::-[^}]*)?\}?/gi;
+  const found = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(command)) !== null) {
+    found.add(match[1]);
+  }
+  return Array.from(found);
+}
+
+function readSiblingHooksFile(pluginJsonPath: string): Record<string, unknown> | null {
+  // plugin.json lives in <pluginRoot>/.claude-plugin/plugin.json;
+  // the sibling hooks file lives at <pluginRoot>/hooks/hooks.json.
+  const manifestDir = pluginJsonPath.slice(0, pluginJsonPath.lastIndexOf('/'));
+  const pluginRoot = manifestDir.slice(0, manifestDir.lastIndexOf('/'));
+  const hooksFilePath = `${pluginRoot}/hooks/hooks.json`;
+
+  if (!fs.existsSync(hooksFilePath)) {
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(hooksFilePath, 'utf-8');
+    const parsed = JSON.parse(content);
+    return parsed && typeof parsed === 'object' ? parsed.hooks || null : null;
+  } catch {
+    return null;
   }
 }
 
@@ -241,6 +305,12 @@ function findPluginJsonFiles(dir: string): string[] {
       const fullPath = `${dir}/${entry.name}`;
 
       if (entry.isDirectory()) {
+        // Skip foreign manifest directories (e.g. .cursor-plugin, .gemini-plugin).
+        // Only the Claude Code manifest directory is a valid source for this extension,
+        // otherwise the same sibling hooks/hooks.json gets counted once per manifest.
+        if (entry.name.startsWith('.') && entry.name !== '.claude-plugin') {
+          continue;
+        }
         // Recurse into subdirectory
         results.push(...findPluginJsonFiles(fullPath));
       } else if (entry.name === 'plugin.json') {
