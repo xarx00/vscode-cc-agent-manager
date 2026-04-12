@@ -207,19 +207,34 @@ async function scanPluginHooks(report: HookHealthReport): Promise<void> {
       try {
         const pluginContent = fs.readFileSync(pluginJsonPath, 'utf-8');
         const plugin = JSON.parse(pluginContent);
-        const hooks = plugin.hooks || {};
         const pluginName = plugin.name || 'unknown-plugin';
 
-        for (const [event, hookEntries] of Object.entries(hooks)) {
-          const commands = extractPluginCommands(hookEntries, event);
+        // Hooks can live in two places:
+        // 1. Inline in plugin.json under a `hooks` key (some custom plugins)
+        // 2. In a sibling file `<pluginRoot>/hooks/hooks.json` relative to
+        //    the directory containing .claude-plugin/plugin.json (the format
+        //    used by official Claude Code plugins like `superpowers`)
+        const hookSources: any[] = [];
+        if (plugin.hooks) {
+          hookSources.push(plugin.hooks);
+        }
+        const siblingHooks = readSiblingHooksFile(pluginJsonPath);
+        if (siblingHooks) {
+          hookSources.push(siblingHooks);
+        }
 
-          for (const command of commands) {
-            const health = await checkHookHealth(command, event, pluginName);
-            report.hooks.push(health);
+        for (const hooks of hookSources) {
+          for (const [event, hookEntries] of Object.entries(hooks)) {
+            const commands = extractPluginCommands(hookEntries, event);
 
-            if (health.status === 'healthy') report.summary.healthy++;
-            else if (health.status === 'warning') report.summary.warnings++;
-            else if (health.status === 'failure') report.summary.failures++;
+            for (const command of commands) {
+              const health = await checkHookHealth(command, event, pluginName);
+              report.hooks.push(health);
+
+              if (health.status === 'healthy') report.summary.healthy++;
+              else if (health.status === 'warning') report.summary.warnings++;
+              else if (health.status === 'failure') report.summary.failures++;
+            }
           }
         }
       } catch (e) {
@@ -228,6 +243,26 @@ async function scanPluginHooks(report: HookHealthReport): Promise<void> {
     }
   } catch (e) {
     // Plugins directory not found or not accessible - continue
+  }
+}
+
+function readSiblingHooksFile(pluginJsonPath: string): Record<string, unknown> | null {
+  // plugin.json lives in <pluginRoot>/.claude-plugin/plugin.json;
+  // the sibling hooks file lives at <pluginRoot>/hooks/hooks.json.
+  const manifestDir = pluginJsonPath.slice(0, pluginJsonPath.lastIndexOf('/'));
+  const pluginRoot = manifestDir.slice(0, manifestDir.lastIndexOf('/'));
+  const hooksFilePath = `${pluginRoot}/hooks/hooks.json`;
+
+  if (!fs.existsSync(hooksFilePath)) {
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(hooksFilePath, 'utf-8');
+    const parsed = JSON.parse(content);
+    return parsed && typeof parsed === 'object' ? parsed.hooks || null : null;
+  } catch {
+    return null;
   }
 }
 

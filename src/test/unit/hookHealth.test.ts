@@ -238,6 +238,89 @@ describe('getHooksHealth', () => {
     expect(health.event).toBe('PreToolUse');
   });
 
+  test('scans plugin hooks from sibling hooks/hooks.json (official plugin layout)', async () => {
+    // Official Claude Code plugins store manifest at <plugin>/.claude-plugin/plugin.json
+    // and hook definitions separately at <plugin>/hooks/hooks.json.
+    const pluginRoot = '/home/test/.claude/plugins/cache/acme/superpowers/1.0.0';
+    const manifestPath = `${pluginRoot}/.claude-plugin/plugin.json`;
+    const hooksPath = `${pluginRoot}/hooks/hooks.json`;
+
+    const manifest = { name: 'superpowers', version: '1.0.0' };
+    const hooksFile = {
+      hooks: {
+        SessionStart: [
+          {
+            matcher: 'startup',
+            hooks: [
+              {
+                type: 'command',
+                command: '/bin/true',
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    // Fake a plugins directory containing one plugin with the official layout.
+    jest.mocked(fs.readdirSync).mockImplementation(((dir: any) => {
+      const d = String(dir);
+      const makeEntry = (name: string, isDir: boolean) => ({
+        name,
+        isDirectory: () => isDir,
+        isFile: () => !isDir,
+      });
+      if (d === '/home/test/.claude/plugins/cache') {
+        return [makeEntry('acme', true)];
+      }
+      if (d === '/home/test/.claude/plugins/cache/acme') {
+        return [makeEntry('superpowers', true)];
+      }
+      if (d === '/home/test/.claude/plugins/cache/acme/superpowers') {
+        return [makeEntry('1.0.0', true)];
+      }
+      if (d === pluginRoot) {
+        return [makeEntry('.claude-plugin', true), makeEntry('hooks', true)];
+      }
+      if (d === `${pluginRoot}/.claude-plugin`) {
+        return [makeEntry('plugin.json', false)];
+      }
+      if (d === `${pluginRoot}/hooks`) {
+        return [makeEntry('hooks.json', false)];
+      }
+      return [];
+    }) as any);
+
+    jest.mocked(fs.existsSync).mockImplementation((p: any) => {
+      return p === '/home/test/.claude/plugins/cache' || p === hooksPath;
+    });
+
+    jest.mocked(fs.readFileSync).mockImplementation((p: any) => {
+      const s = String(p);
+      if (s === '/home/test/.claude/settings.json') {
+        return JSON.stringify({ hooks: {} });
+      }
+      if (s === manifestPath) {
+        return JSON.stringify(manifest);
+      }
+      if (s === hooksPath) {
+        return JSON.stringify(hooksFile);
+      }
+      throw new Error(`Unexpected readFileSync: ${s}`);
+    });
+
+    mockExecFn = jest.fn((cmd: string, opts: any, cb: any) => {
+      cb(null, { stdout: '', stderr: '' });
+    });
+
+    const result = await getHooksHealth();
+
+    expect(result.hooks).toHaveLength(1);
+    expect(result.hooks[0].event).toBe('SessionStart');
+    expect(result.hooks[0].path).toContain('superpowers');
+    expect(result.hooks[0].path).toContain('/bin/true');
+  });
+
   test('aggregates health status counts in summary', async () => {
     const settings = {
       hooks: {
