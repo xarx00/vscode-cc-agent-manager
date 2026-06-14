@@ -912,6 +912,8 @@
     el.id = 'hash-dropdown';
     el.style.display = 'none';
     el.innerHTML =
+      '<div class="hash-dropdown-item" data-action="open">Resume/Fork session</div>' +
+      '<div class="hash-dropdown-sep"></div>' +
       '<div class="hash-dropdown-item" data-action="id">Copy ID</div>' +
       '<div class="hash-dropdown-item" data-action="cmd">Copy claude -r \u2026</div>' +
       '<div class="hash-dropdown-item" data-action="fork">Copy claude -r \u2026 --fork-session</div>';
@@ -922,6 +924,11 @@
       if (!item) return;
       const id = el.dataset.currentId || '';
       const action = item.dataset.action;
+      if (action === 'open') {
+        closeHashDropdown();
+        vscode.postMessage({ command: 'openInClaudeCode', sessionId: id });
+        return;
+      }
       const text = action === 'cmd' ? `claude -r ${id}` : action === 'fork' ? `claude -r ${id} --fork-session` : id;
       const activeBtn = _dropdownActiveBtn;
       closeHashDropdown();
