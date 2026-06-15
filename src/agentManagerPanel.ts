@@ -21,7 +21,14 @@ const CLAUDE_CODE_OPEN_COMMAND = 'claude-vscode.editor.open';
 /** Prompt pre-filled into a fresh Claude Code panel to fork-resume a past session. */
 const buildForkResumePrompt = (sessionId: string): string =>
   `You are a continuation of an earlier Claude Code session, id \`${sessionId}\`. ` +
-  `Find it, if it's not already loaded. Then we'll continue.`;
+  `Determine whether the session has been already resumed, or whether you are a new ` +
+  `session (if this is the only prompt in the current session, it's a new session). ` +
+  `For a new session you need to restore the earlier session transcript ` +
+  `(read the last ~15 text/tool events of its transcript), identify from it the last ` +
+  `in-flight work, verify on disk the state of the files it touched (a final Write ` +
+  `may not have persisted), and summarize (in the language of the previous conversation) ` +
+  `exactly where we ended and what's unfinished. Using other means for that may not be ` +
+  `sufficient. Then we'll continue.`;
 
 export class AgentManagerPanel {
   public static currentPanel: AgentManagerPanel | undefined;
